@@ -62,7 +62,7 @@ const submit = () => {
     >
         <div v-if="show" class="fixed inset-0 z-[60] flex items-center justify-center bg-[#213448]/80 backdrop-blur-sm p-4" @click.self="$emit('close')">
             
-            <div class="relative w-full max-w-xl transform rounded-2xl bg-[#EAE0CF] shadow-2xl transition-all border border-[#94B4C1]">
+            <div class="relative w-full max-w-xl transform rounded-2xl bg-[#FFF] shadow-2xl transition-all border border-[#94B4C1]">
                 
                 <div class="flex items-center justify-between border-b border-[#94B4C1]/50 px-6 py-4">
                     <h3 class="text-xl font-bold text-[#213448]">

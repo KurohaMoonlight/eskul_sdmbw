@@ -12,7 +12,9 @@ class Admin extends Authenticatable
     protected $table = 'admin';
     protected $primaryKey = 'id_admin';
     
-    // Agar kolom password default laravel bisa membaca kolom password kita
+    // MATIKAN TIMESTAMP karena tabel admin tidak punya created_at/updated_at
+    public $timestamps = false; 
+    
     protected $fillable = [
         'username',
         'password',

@@ -77,7 +77,7 @@ const deletePembimbing = () => {
         cancelButtonColor: '#547792', // Biru untuk batal
         confirmButtonText: 'Ya, Hapus!',
         cancelButtonText: 'Batal',
-        background: '#EAE0CF',
+        background: '#FFF',
         color: '#213448',
         iconColor: '#d33'
     }).then((result) => {
@@ -90,7 +90,7 @@ const deletePembimbing = () => {
                         title: 'Terhapus!',
                         text: 'Data pembimbing telah dihapus.',
                         icon: 'success',
-                        background: '#EAE0CF',
+                        background: '#FFF',
                         color: '#213448',
                         confirmButtonColor: '#547792'
                     });
@@ -114,7 +114,7 @@ const deletePembimbing = () => {
         <div v-if="show" class="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto overflow-x-hidden bg-[#213448]/80 backdrop-blur-sm p-4 md:p-6" @click.self="$emit('close')">
             
             <!-- Card Modal -->
-            <div class="relative w-full max-w-xl transform rounded-2xl bg-[#EAE0CF] shadow-2xl transition-all border border-[#94B4C1]">
+            <div class="relative w-full max-w-xl transform rounded-2xl bg-[#FFF] shadow-2xl transition-all border border-[#94B4C1]">
                 
                 <!-- Header -->
                 <div class="flex items-center justify-between border-b border-[#94B4C1]/50 px-6 py-4">

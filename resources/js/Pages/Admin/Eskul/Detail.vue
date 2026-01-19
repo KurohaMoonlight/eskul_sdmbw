@@ -5,6 +5,7 @@ import Navbar from '@/Components/Navbar.vue';
 import TabJadwal from '@/Components/TabJadwal.vue';
 import TabAnggota from '@/Components/TabAnggota.vue';
 import ModalFormEskul from '@/Components/ModalFormEskul.vue'; // IMPORT INI WAJIB ADA
+import Footer from '../../../Components/Footer.vue';
 
 const props = defineProps({
     eskul: {
@@ -28,7 +29,7 @@ const openEditInfo = () => {
 <template>
     <Head :title="'Detail ' + (props.eskul?.nama_eskul || 'Eskul')" />
 
-    <div class="min-h-screen bg-[#EAE0CF]">
+    <div class="min-h-screen bg-[#FFF]">
         <Navbar>
             <Link href="/admin/dashboard" class="flex items-center gap-2 text-sm font-bold text-[#94B4C1] hover:text-[#213448]">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -128,4 +129,6 @@ const openEditInfo = () => {
             @close="showEditModal = false"
         />
     </div>
+    <!-- Footer -->
+     <Footer/>
 </template>

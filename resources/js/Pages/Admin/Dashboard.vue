@@ -6,6 +6,7 @@ import ModalFormPembimbing from '@/Components/ModalFormPembimbing.vue';
 import ModalFormEskul from '@/Components/ModalFormEskul.vue'; // Import Modal Eskul
 import TablePembimbing from '@/Components/TablePembimbing.vue';
 import CardEskul from '@/Components/CardEskul.vue';
+import Footer from '../../Components/Footer.vue';
 
 // Props dari Controller
 const props = defineProps({
@@ -47,7 +48,7 @@ const openTambahEskul = () => {
 <template>
     <Head title="Dashboard Admin" />
 
-    <div class="min-h-screen bg-[#EAE0CF]">
+    <div class="min-h-screen bg-[#FFF]">
         
         <!-- Navbar -->
         <Navbar>
@@ -134,4 +135,7 @@ const openTambahEskul = () => {
         />
 
     </div>
+    <!-- Footer -->
+    <Footer />
+
 </template>

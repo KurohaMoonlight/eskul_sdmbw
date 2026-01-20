@@ -13,28 +13,32 @@ class AuthController extends Controller
      */
     public function authenticate(Request $request)
     {
-        // 1. Validasi Input
+        // 1. Validasi Input Utama
         $credentials = $request->validate([
             'username' => ['required', 'string'],
             'password' => ['required', 'string'],
         ]);
 
-        // 2. Cek Login sebagai ADMIN
-        // Fungsi attempt() otomatis mengenkripsi password input dengan Bcrypt
-        // dan mencocokkannya dengan hash yang ada di tabel admin.
-        if (Auth::guard('admin')->attempt($credentials)) {
+        // 2. Ambil Nilai Checkbox 'Remember Me'
+        // $request->boolean() akan mengonversi input menjadi true/false.
+        // Jika checkbox tidak dicentang (tidak dikirim), otomatis dianggap false.
+        $remember = $request->boolean('remember');
+
+        // 3. Cek Login sebagai ADMIN
+        // Parameter kedua ($remember) dimasukkan ke fungsi attempt
+        if (Auth::guard('admin')->attempt($credentials, $remember)) {
             $request->session()->regenerate();
             return redirect()->intended(route('admin.dashboard'));
         }
 
-        // 3. Cek Login sebagai PEMBIMBING (Jika Admin Gagal)
-        // Sama, attempt() otomatis menangani verifikasi Bcrypt untuk pembimbing.
-        if (Auth::guard('pembimbing')->attempt($credentials)) {
+        // 4. Cek Login sebagai PEMBIMBING
+        // Parameter kedua ($remember) dimasukkan ke fungsi attempt
+        if (Auth::guard('pembimbing')->attempt($credentials, $remember)) {
             $request->session()->regenerate();
             return redirect()->intended(route('pembimbing.dashboard'));
         }
 
-        // 4. Jika keduanya gagal, lempar error validasi
+        // 5. Jika Login Gagal
         throw ValidationException::withMessages([
             'username' => 'Username atau password salah.',
         ]);

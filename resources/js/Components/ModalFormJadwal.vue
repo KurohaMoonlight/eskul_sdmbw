@@ -26,6 +26,9 @@ const form = useForm({
 // Watcher: Reset/Isi form saat modal dibuka
 watch(() => props.show, (isOpen) => {
     if (isOpen) {
+        // Clear errors saat modal dibuka
+        form.clearErrors();
+
         if (props.jadwalData) {
             // Mode Edit
             form.id_eskul = props.jadwalData.id_eskul;
@@ -39,7 +42,8 @@ watch(() => props.show, (isOpen) => {
         } else {
             // Mode Tambah
             form.reset();
-            form.id_eskul = props.idEskul;
+            // PASTIKAN ID ESKUL TERISI DI SINI
+            form.id_eskul = props.idEskul; 
             form.hari = [];
             form.kelas_min = '1';
             form.kelas_max = '6';
@@ -48,6 +52,11 @@ watch(() => props.show, (isOpen) => {
 });
 
 const submit = () => {
+    // Pastikan id_eskul terisi sebelum submit (double check untuk mode tambah)
+    if (!form.id_eskul && props.idEskul) {
+        form.id_eskul = props.idEskul;
+    }
+
     // Logic URL & Method
     const url = props.jadwalData ? `/admin/jadwal/${props.jadwalData.id_jadwal}` : '/admin/jadwal';
     const method = props.jadwalData ? 'put' : 'post';
@@ -58,6 +67,9 @@ const submit = () => {
             form.reset();
             emit('close');
         },
+        onError: (errors) => {
+            console.error("Gagal simpan jadwal:", errors);
+        }
     });
 };
 </script>
@@ -75,7 +87,7 @@ const submit = () => {
         <div v-if="show" class="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto overflow-x-hidden bg-[#213448]/80 backdrop-blur-sm p-4" @click.self="$emit('close')">
             
             <!-- Modal Card -->
-            <div class="relative w-full max-w-lg transform rounded-2xl bg-[#FFF] shadow-2xl transition-all border border-[#94B4C1]">
+            <div class="relative w-full max-w-lg transform rounded-2xl bg-white shadow-2xl transition-all border border-[#94B4C1]">
                 
                 <!-- Header -->
                 <div class="flex items-center justify-between border-b border-[#94B4C1]/50 px-6 py-4">

@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\PembimbingController;
 use App\Http\Controllers\EskulController;
-use App\Http\Controllers\JadwalController; // Import Controller Jadwal
+use App\Http\Controllers\JadwalController;
 use App\Http\Controllers\AnggotaController;
 use App\Models\Pembimbing;
 use App\Models\Eskul;
@@ -49,28 +49,34 @@ Route::middleware(['auth:admin'])->group(function () {
     Route::put('/admin/eskul/{id}', [EskulController::class, 'update']);
     Route::delete('/admin/eskul/{id}', [EskulController::class, 'destroy']);
 
-    // CRUD Jadwal
-    Route::post('/admin/jadwal', [JadwalController::class, 'store']);
-    Route::put('/admin/jadwal/{id}', [JadwalController::class, 'update']);
-    Route::delete('/admin/jadwal/{id}', [JadwalController::class, 'destroy']);
-
-    Route::post('/admin/anggota', [AnggotaController::class, 'store']);
-    Route::put('/admin/anggota/{id}', [AnggotaController::class, 'update']);
-    Route::delete('/admin/anggota/{id}', [AnggotaController::class, 'destroy']);
-
 });
 
 // 3. Group Khusus PEMBIMBING
 Route::middleware(['auth:pembimbing'])->group(function () {
     
-    Route::get('/pembimbing/dashboard', function () {
-        return Inertia::render('Pembimbing/Dashboard');
-    })->name('pembimbing.dashboard');
-
+    Route::get('/pembimbing/dashboard', [PembimbingController::class, 'dashboard'])->name('pembimbing.dashboard');
+    
 });
 
-// 4. Route Logout
-Route::middleware(['auth:admin,pembimbing'])->post('/logout', [AuthController::class, 'logout'])->name('logout');
+// 4. Group AKSES BERSAMA (Admin & Pembimbing)
+// Route ini bisa diakses oleh siapa saja yang login sebagai admin ATAU pembimbing
+Route::middleware(['auth:admin,pembimbing'])->group(function () {
+    
+    // CRUD Jadwal (Sekarang Pembimbing bisa akses ini)
+    // URL tetap '/admin/jadwal' tapi bisa diakses pembimbing karena middlewarenya 'auth:admin,pembimbing'
+    Route::post('/admin/jadwal', [JadwalController::class, 'store']);
+    Route::put('/admin/jadwal/{id}', [JadwalController::class, 'update']);
+    Route::delete('/admin/jadwal/{id}', [JadwalController::class, 'destroy']);
+
+    // CRUD Anggota (Sekarang Pembimbing bisa akses ini)
+    Route::post('/admin/anggota', [AnggotaController::class, 'store']);
+    Route::put('/admin/anggota/{id}', [AnggotaController::class, 'update']);
+    Route::delete('/admin/anggota/{id}', [AnggotaController::class, 'destroy']);
+
+    // Route Logout
+    Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+});
+
 
 // 5. Redirect root '/'
 Route::get('/', function () {

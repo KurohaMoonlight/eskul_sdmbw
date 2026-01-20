@@ -5,6 +5,7 @@ import { ref } from 'vue';
 const form = useForm({
     username: '',
     password: '',
+    remember: false,
 });
 
 // State untuk visibilitas password
@@ -109,6 +110,18 @@ const submit = () => {
                     <div v-if="form.errors.password" class="text-red-500 text-xs">
                         {{ form.errors.password }}
                     </div>
+                </div>
+
+                <!-- Checkbox Remember Me (Tambahkan di sini sebelum tombol login) -->
+                <div class="flex items-center">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input 
+                            type="checkbox" 
+                            v-model="form.remember" 
+                            class="rounded border-[#94B4C1] text-[#213448] shadow-sm focus:border-[#213448] focus:ring focus:ring-[#547792] focus:ring-opacity-50"
+                        >
+                        <span class="text-sm text-[#547792]">Ingat Saya</span>
+                    </label>
                 </div>
 
                 <!-- Tombol Login -->

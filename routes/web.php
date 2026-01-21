@@ -56,6 +56,7 @@ Route::middleware(['auth:pembimbing'])->group(function () {
     
     Route::get('/pembimbing/dashboard', [PembimbingController::class, 'dashboard'])->name('pembimbing.dashboard');
     
+    Route::get('/pembimbing/eskul/{id}', [PembimbingController::class, 'show'])->name('pembimbing.eskul.detail');
 });
 
 // 4. Group AKSES BERSAMA (Admin & Pembimbing)

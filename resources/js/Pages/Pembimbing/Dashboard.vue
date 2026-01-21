@@ -2,14 +2,14 @@
 import { computed } from 'vue';
 import { Head, usePage } from '@inertiajs/vue3';
 import Navbar from '@/Components/Navbar.vue';
-import CardShowEskul from '@/Components/CardShowEskul.vue';
+import CardShowEskul from '@/Components/CardShowEskul.vue'; // Pastikan import sesuai nama file komponen
 
 const page = usePage();
 const user = computed(() => page.props.auth?.user);
 
 const props = defineProps({
     eskul_list: {
-        type: Array, // Menerima array list eskul
+        type: Array, // Menerima array dari Controller
         default: () => []
     }
 });
@@ -55,7 +55,9 @@ const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'n
                     </h2>
 
                     <div v-if="props.eskul_list.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        <CardEskul 
+                        <!-- Looping CardEskul -->
+                        <!-- FIX: Mengembalikan prop :data karena komponen internal mengakses props.data -->
+                        <CardShowEskul 
                             v-for="item in props.eskul_list" 
                             :key="item.id_eskul" 
                             :data="item" 

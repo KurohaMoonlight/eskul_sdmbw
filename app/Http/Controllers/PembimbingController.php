@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Pembimbing;
 use App\Models\Eskul;
 use App\Models\Jadwal;
-use App\Models\AnggotaEskul; // Tambahkan ini
+use App\Models\AnggotaEskul;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -15,38 +15,47 @@ use Inertia\Inertia;
 class PembimbingController extends Controller
 {
     /**
-     * Menampilkan Dashboard Pembimbing dengan Jadwal Eskul yang diampu.
+     * Menampilkan Dashboard Pembimbing dengan List Eskul.
      */
     public function dashboard()
     {
         $idPembimbing = Auth::guard('pembimbing')->id();
+        $listEskul = Eskul::where('id_pembimbing', $idPembimbing)->get();
 
-        // Cari Eskul yang diampu oleh pembimbing ini
-        $eskul = Eskul::where('id_pembimbing', $idPembimbing)->first();
-
-        $jadwal = [];
-        $anggota = [];
-
-        if ($eskul) {
-            // Ambil jadwal
-            $jadwal = Jadwal::where('id_eskul', $eskul->id_eskul)->get();
-            
-            // Ambil anggota beserta data peserta
-            $anggota = AnggotaEskul::with('peserta')
-                ->where('id_eskul', $eskul->id_eskul)
-                ->get();
-        }
-
-        // Perhatikan path 'Pembimbing/Dashboard', pastikan file Vue ada di folder resources/js/Pages/Pembimbing/Dashboard.vue
-        // Jika file ada di root Pages, ganti jadi 'Dashboard'
         return Inertia::render('Pembimbing/Dashboard', [
-            'eskul'   => $eskul,   // <-- Wajib dikirim agar props.eskul tidak null
-            'jadwal'  => $jadwal,
-            'anggota' => $anggota, // <-- Dikirim untuk list anggota
+            'eskul_list' => $listEskul
         ]);
     }
 
-    // ... method store, update, destroy biarkan tetap sama ...
+    /**
+     * Menampilkan Detail Satu Eskul (Jadwal & Anggota).
+     */
+    public function show($id)
+    {
+        $idPembimbing = Auth::guard('pembimbing')->id();
+
+        // 1. Cari Eskul berdasarkan ID dan pastikan milik pembimbing yang login
+        // agar pembimbing lain tidak bisa intip eskul orang lain.
+        $eskul = Eskul::where('id_eskul', $id)
+                      ->where('id_pembimbing', $idPembimbing)
+                      ->firstOrFail();
+
+        // 2. Ambil Jadwal
+        $jadwal = Jadwal::where('id_eskul', $eskul->id_eskul)->get();
+
+        // 3. Ambil Anggota + Data Peserta
+        $anggota = AnggotaEskul::with('peserta')
+                    ->where('id_eskul', $eskul->id_eskul)
+                    ->get();
+
+        return Inertia::render('Pembimbing/EskulCardDetail', [
+            'eskul'   => $eskul,
+            'jadwal'  => $jadwal,
+            'anggota' => $anggota
+        ]);
+    }
+
+    // ... (method store, update, destroy biarkan sama)
     public function store(Request $request)
     {
         $validated = $request->validate([

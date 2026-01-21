@@ -128,12 +128,7 @@ const deleteAnggota = (id) => {
 
 // Toggle Status Aktif (Menggunakan router.put manual karena bukan form submit biasa)
 const updateStatusAnggota = (anggota) => {
-    // Balikkan status untuk dikirim ke server
     const newStatus = !anggota.status_aktif;
-    
-    // Kita butuh mengirim semua data required untuk update (karena controller validasi full)
-    // Atau buat endpoint khusus toggle status (lebih baik). 
-    // Tapi karena controller update butuh semua field, kita kirim ulang data yang ada.
     
     router.put(`/admin/anggota/${anggota.id_anggota}`, {
         // Data Peserta
@@ -142,11 +137,10 @@ const updateStatusAnggota = (anggota) => {
         jenis_kelamin: anggota.peserta.jenis_kelamin,
         // Data Anggota
         tahun_ajaran: anggota.tahun_ajaran,
-        status_aktif: newStatus, // Status baru
+        status_aktif: newStatus, 
     }, {
         preserveScroll: true,
         onSuccess: () => {
-            // Optional: Toast notif
             const Toast = Swal.mixin({
                 toast: true, position: 'top-end', showConfirmButton: false, timer: 3000,
                 timerProgressBar: true, didOpen: (toast) => {
@@ -157,7 +151,6 @@ const updateStatusAnggota = (anggota) => {
             Toast.fire({ icon: 'success', title: `Status anggota diubah: ${newStatus ? 'Aktif' : 'Non-Aktif'}` });
         },
         onError: () => {
-            // Revert checkbox visual change (jika manual binding) - tapi karena Inertia reload, state akan kembali jika gagal
             Swal.fire('Gagal!', 'Gagal mengubah status.', 'error');
         }
     });
@@ -305,7 +298,8 @@ const onDayClick = (day) => {
                                             <div v-for="kegiatan in kegiatanHariIni" :key="kegiatan.id_kegiatan" class="mb-3 bg-white p-3 rounded shadow-sm border border-gray-100 last:mb-0 relative group/item">
                                                 
                                                 <!-- Action Buttons (Edit & Delete) -->
-                                                <div class="absolute top-2 right-2 flex gap-1 opacity-0 group-hover/item:opacity-100 transition-opacity bg-white p-1 rounded-md shadow-sm border border-gray-100">
+                                                <!-- FIX: opacity-100 di mobile (default), opacity-0 di desktop (md) dan muncul saat hover -->
+                                                <div class="absolute top-2 right-2 flex gap-1 opacity-100 md:opacity-0 md:group-hover/item:opacity-100 transition-opacity bg-white p-1 rounded-md shadow-sm border border-gray-100">
                                                     <button @click="openEditKegiatan(kegiatan)" class="p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded" title="Edit">
                                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                                                     </button>
@@ -383,9 +377,10 @@ const onDayClick = (day) => {
                                             </label>
 
                                             <!-- Edit Button -->
+                                            <!-- FIX: opacity-100 di mobile (default), opacity-0 di desktop (md) dan muncul saat hover -->
                                             <button 
                                                 @click="openEditAnggota(item)"
-                                                class="text-gray-400 hover:text-blue-500 transition opacity-0 group-hover/anggota:opacity-100"
+                                                class="text-gray-400 hover:text-blue-500 transition opacity-100 md:opacity-0 md:group-hover/anggota:opacity-100"
                                                 title="Edit Data"
                                             >
                                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -394,9 +389,10 @@ const onDayClick = (day) => {
                                             </button>
 
                                             <!-- Delete Button -->
+                                            <!-- FIX: opacity-100 di mobile (default), opacity-0 di desktop (md) dan muncul saat hover -->
                                             <button 
                                                 @click="deleteAnggota(item.id_anggota)"
-                                                class="text-gray-400 hover:text-red-500 transition opacity-0 group-hover/anggota:opacity-100"
+                                                class="text-gray-400 hover:text-red-500 transition opacity-100 md:opacity-0 md:group-hover/anggota:opacity-100"
                                                 title="Hapus Anggota"
                                             >
                                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

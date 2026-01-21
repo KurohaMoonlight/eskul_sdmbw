@@ -6,6 +6,7 @@ use App\Http\Controllers\PembimbingController;
 use App\Http\Controllers\EskulController;
 use App\Http\Controllers\JadwalController;
 use App\Http\Controllers\AnggotaController;
+use App\Http\Controllers\KegiatanController; // Import Controller Baru
 use App\Models\Pembimbing;
 use App\Models\Eskul;
 use Inertia\Inertia;
@@ -63,16 +64,20 @@ Route::middleware(['auth:pembimbing'])->group(function () {
 // Route ini bisa diakses oleh siapa saja yang login sebagai admin ATAU pembimbing
 Route::middleware(['auth:admin,pembimbing'])->group(function () {
     
-    // CRUD Jadwal (Sekarang Pembimbing bisa akses ini)
-    // URL tetap '/admin/jadwal' tapi bisa diakses pembimbing karena middlewarenya 'auth:admin,pembimbing'
+    // CRUD Jadwal
     Route::post('/admin/jadwal', [JadwalController::class, 'store']);
     Route::put('/admin/jadwal/{id}', [JadwalController::class, 'update']);
     Route::delete('/admin/jadwal/{id}', [JadwalController::class, 'destroy']);
 
-    // CRUD Anggota (Sekarang Pembimbing bisa akses ini)
+    // CRUD Anggota
     Route::post('/admin/anggota', [AnggotaController::class, 'store']);
     Route::put('/admin/anggota/{id}', [AnggotaController::class, 'update']);
     Route::delete('/admin/anggota/{id}', [AnggotaController::class, 'destroy']);
+
+    // CRUD Kegiatan (Baru Ditambahkan)
+    Route::post('/admin/kegiatan', [KegiatanController::class, 'store']);
+    Route::put('/admin/kegiatan/{id}', [KegiatanController::class, 'update']);
+    Route::delete('/admin/kegiatan/{id}', [KegiatanController::class, 'destroy']);
 
     // Route Logout
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');

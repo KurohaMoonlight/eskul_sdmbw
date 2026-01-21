@@ -1,10 +1,15 @@
 <script setup>
-import { ref } from 'vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { ref, computed } from 'vue';
+import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import Navbar from '@/Components/Navbar.vue';
 import ModalFormJadwal from '@/Components/ModalFormJadwal.vue';
-import ModalFormAddAnggota from '@/Components/ModalFormAddAnggota.vue'; // Gunakan Modal Anda
+import ModalFormAddAnggota from '@/Components/ModalFormAddAnggota.vue';
+import ModalFormKegiatan from '@/Components/ModalFormKegiatan.vue';
+import { Calendar } from 'v-calendar';
+import 'v-calendar/style.css';
+import Swal from 'sweetalert2';
 
+// 1. Definisikan Props
 const props = defineProps({
     eskul: Object,
     jadwal: {
@@ -15,6 +20,10 @@ const props = defineProps({
         type: Array,
         default: () => []
     },
+    kegiatan: {
+        type: Array,
+        default: () => []
+    }
 });
 
 const formatTime = (time) => {
@@ -22,22 +31,172 @@ const formatTime = (time) => {
     return time.substring(0, 5);
 };
 
-// State untuk Modal
+// 2. State Modal & Data
 const showModalJadwal = ref(false);
 const showModalAnggota = ref(false);
+const showModalKegiatan = ref(false);
 
-// State untuk Data Edit (Jika nanti butuh edit, sementara null)
 const selectedAnggota = ref(null);
+const selectedKegiatan = ref(null);
+const selectedDate = ref(new Date());
 
+// 3. Konfigurasi Kalender (Attributes)
+const calendarAttributes = computed(() => {
+    const attrs = [
+        {
+            key: 'today',
+            highlight: { color: 'blue', fillMode: 'light' },
+            dates: new Date(),
+        },
+    ];
+
+    if (props.kegiatan && props.kegiatan.length > 0) {
+        props.kegiatan
+            .filter(k => props.eskul && k.id_eskul === props.eskul.id_eskul)
+            .forEach(k => {
+                const dateKegiatan = new Date(k.tanggal);
+                const today = new Date();
+                dateKegiatan.setHours(0, 0, 0, 0);
+                today.setHours(0, 0, 0, 0);
+
+                let dotColor = 'red'; // Default: Future
+                if (dateKegiatan < today) {
+                    dotColor = 'blue'; // Past
+                } else if (dateKegiatan.getTime() === today.getTime()) {
+                    dotColor = 'green'; // Today
+                }
+
+                attrs.push({
+                    key: `kegiatan-${k.id_kegiatan}`,
+                    dot: { color: dotColor, class: 'kegiatan-dot' },
+                    dates: new Date(k.tanggal),
+                    customData: k,
+                });
+            });
+    }
+    return attrs;
+});
+
+const kegiatanHariIni = computed(() => {
+    if (!selectedDate.value) return [];
+    const year = selectedDate.value.getFullYear();
+    const month = String(selectedDate.value.getMonth() + 1).padStart(2, '0');
+    const day = String(selectedDate.value.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+
+    return props.kegiatan.filter(k => 
+        k.tanggal === dateStr && 
+        props.eskul && 
+        k.id_eskul === props.eskul.id_eskul
+    );
+});
+
+// 4. Logika Modal & CRUD Anggota
 const openTambahAnggota = () => {
-    selectedAnggota.value = null; // Pastikan null saat tambah baru
+    selectedAnggota.value = null; 
     showModalAnggota.value = true;
 };
 
-// Jika nanti butuh edit
-const openEditAnggota = (item) => {
-    selectedAnggota.value = item;
+const openEditAnggota = (anggota) => {
+    selectedAnggota.value = anggota;
     showModalAnggota.value = true;
+};
+
+// Form khusus delete (anggota & kegiatan)
+const deleteForm = useForm({});
+
+const deleteAnggota = (id) => {
+    Swal.fire({
+        title: 'Hapus Anggota?',
+        text: "Data keanggotaan dan data siswa akan dihapus permanen!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: 'Ya, Hapus!',
+        cancelButtonText: 'Batal'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            deleteForm.delete(`/admin/anggota/${id}`, {
+                preserveScroll: true,
+                onSuccess: () => Swal.fire('Terhapus!', 'Anggota berhasil dihapus.', 'success'),
+                onError: () => Swal.fire('Gagal!', 'Terjadi kesalahan saat menghapus.', 'error')
+            });
+        }
+    });
+};
+
+// Toggle Status Aktif (Menggunakan router.put manual karena bukan form submit biasa)
+const updateStatusAnggota = (anggota) => {
+    // Balikkan status untuk dikirim ke server
+    const newStatus = !anggota.status_aktif;
+    
+    // Kita butuh mengirim semua data required untuk update (karena controller validasi full)
+    // Atau buat endpoint khusus toggle status (lebih baik). 
+    // Tapi karena controller update butuh semua field, kita kirim ulang data yang ada.
+    
+    router.put(`/admin/anggota/${anggota.id_anggota}`, {
+        // Data Peserta
+        nama_lengkap: anggota.peserta.nama_lengkap,
+        tingkat_kelas: anggota.peserta.tingkat_kelas,
+        jenis_kelamin: anggota.peserta.jenis_kelamin,
+        // Data Anggota
+        tahun_ajaran: anggota.tahun_ajaran,
+        status_aktif: newStatus, // Status baru
+    }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            // Optional: Toast notif
+            const Toast = Swal.mixin({
+                toast: true, position: 'top-end', showConfirmButton: false, timer: 3000,
+                timerProgressBar: true, didOpen: (toast) => {
+                    toast.addEventListener('mouseenter', Swal.stopTimer)
+                    toast.addEventListener('mouseleave', Swal.resumeTimer)
+                }
+            });
+            Toast.fire({ icon: 'success', title: `Status anggota diubah: ${newStatus ? 'Aktif' : 'Non-Aktif'}` });
+        },
+        onError: () => {
+            // Revert checkbox visual change (jika manual binding) - tapi karena Inertia reload, state akan kembali jika gagal
+            Swal.fire('Gagal!', 'Gagal mengubah status.', 'error');
+        }
+    });
+};
+
+// 5. Logika Kegiatan
+const openTambahKegiatan = () => {
+    selectedKegiatan.value = null; 
+    showModalKegiatan.value = true;
+};
+
+const openEditKegiatan = (item) => {
+    selectedKegiatan.value = item;
+    showModalKegiatan.value = true;
+};
+
+const deleteKegiatan = (id) => {
+    Swal.fire({
+        title: 'Hapus Kegiatan?',
+        text: "Data yang dihapus tidak dapat dikembalikan!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: 'Ya, Hapus!',
+        cancelButtonText: 'Batal'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            deleteForm.delete(`/admin/kegiatan/${id}`, {
+                preserveScroll: true,
+                onSuccess: () => Swal.fire('Terhapus!', 'Data kegiatan berhasil dihapus.', 'success'),
+                onError: () => Swal.fire('Gagal!', 'Terjadi kesalahan saat menghapus data.', 'error')
+            });
+        }
+    });
+};
+
+const onDayClick = (day) => {
+    selectedDate.value = day.date;
 };
 </script>
 
@@ -50,6 +209,7 @@ const openEditAnggota = (item) => {
         <main class="py-10">
             <div class="w-full px-6 md:px-8">
                 
+                <!-- Header -->
                 <div class="mb-6">
                     <Link href="/pembimbing/dashboard" class="text-sm text-gray-500 hover:text-[#547792] flex items-center gap-1 mb-2 group">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
@@ -62,9 +222,11 @@ const openEditAnggota = (item) => {
 
                 <div class="flex flex-col lg:flex-row gap-6 w-full">
                     
-                    <!-- BOX JADWAL (Kiri) -->
-                    <div class="w-full lg:w-[40%]">
-                        <div class="rounded-xl bg-white border border-gray-100 shadow-sm overflow-hidden h-full flex flex-col">
+                    <!-- KOLOM KIRI (Jadwal + Agenda) -->
+                    <div class="w-full lg:w-[40%] flex flex-col gap-6">
+                        
+                        <!-- 1. BOX JADWAL -->
+                        <div class="rounded-xl bg-white border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                             <div class="bg-[#213448] px-6 py-4 flex items-center justify-between">
                                 <h3 class="text-[#EAE0CF] font-bold text-lg flex items-center gap-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-[#94B4C1]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
@@ -75,7 +237,7 @@ const openEditAnggota = (item) => {
                                 </span>
                             </div>
 
-                            <div class="flex-1 flex flex-col max-h-[500px] overflow-y-auto">
+                            <div class="flex-1 flex flex-col max-h-[300px] overflow-y-auto">
                                 <div v-if="props.jadwal.length > 0" class="divide-y divide-gray-100">
                                     <div v-for="item in props.jadwal" :key="item.id_jadwal" class="p-4 hover:bg-gray-50 transition-colors flex items-center gap-4">
                                         <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#213448]/5 text-[#213448]">
@@ -85,26 +247,102 @@ const openEditAnggota = (item) => {
                                             <p class="text-sm font-bold text-gray-800 truncate">{{ item.lokasi || 'Lokasi belum diatur' }}</p>
                                             <p class="text-xs text-gray-500 mt-0.5">{{ formatTime(item.jam_mulai) }} - {{ formatTime(item.jam_selesai) }} WIB</p>
                                         </div>
-                                        <span class="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
-                                            Kls {{ item.kelas_min }}-{{ item.kelas_max }}
-                                        </span>
                                     </div>
                                 </div>
-                                <div v-else class="p-8 flex flex-col justify-center items-center text-center h-full min-h-[150px]">
+                                <div v-else class="p-6 flex flex-col justify-center items-center text-center">
                                     <p class="text-gray-400 text-sm">Belum ada jadwal latihan.</p>
                                 </div>
                             </div>
 
-                            <div class="bg-gray-50 px-6 py-4 border-t border-gray-100 mt-auto">
+                            <div class="bg-gray-50 px-6 py-3 border-t border-gray-100">
                                 <button @click="showModalJadwal = true" class="w-full rounded-lg bg-[#547792] px-4 py-2 text-sm font-bold text-white hover:bg-[#213448] shadow-md transition flex items-center justify-center gap-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
                                     Tambah Jadwal
                                 </button>
                             </div>
                         </div>
+
+                        <!-- 2. BOX AGENDA & KALENDER -->
+                        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+                            <h3 class="text-[#213448] font-bold text-lg mb-4 flex items-center gap-2 pb-2 border-b border-gray-100">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-[#547792]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                Agenda Kegiatan
+                            </h3>
+                            
+                            <div class="flex flex-col xl:flex-row gap-6">
+                                <!-- Kalender -->
+                                <div class="flex-shrink-0 flex justify-center">
+                                    <Calendar 
+                                        expanded
+                                        transparent
+                                        borderless
+                                        :attributes="calendarAttributes"
+                                        @dayclick="onDayClick"
+                                        class="custom-calendar w-full max-w-[300px]"
+                                    />
+                                </div>
+
+                                <!-- Box Detail Kegiatan Hari Ini -->
+                                <div class="flex-1 border-l border-gray-100 pl-0 xl:pl-6 pt-4 xl:pt-0 flex flex-col">
+                                    <div class="flex items-center justify-between mb-3">
+                                        <h4 class="text-sm font-bold text-gray-700">
+                                            {{ selectedDate ? selectedDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Pilih Tanggal' }}
+                                        </h4>
+                                        <button 
+                                            @click="openTambahKegiatan"
+                                            class="text-xs bg-[#547792] text-white px-2 py-1 rounded hover:bg-[#213448] transition flex items-center gap-1"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+                                            Kegiatan
+                                        </button>
+                                    </div>
+
+                                    <div class="flex-1 bg-gray-50 rounded-lg p-3 min-h-[150px] max-h-[300px] overflow-y-auto">
+                                        <!-- Tampilan List Kegiatan -->
+                                        <template v-if="kegiatanHariIni.length > 0">
+                                            <div v-for="kegiatan in kegiatanHariIni" :key="kegiatan.id_kegiatan" class="mb-3 bg-white p-3 rounded shadow-sm border border-gray-100 last:mb-0 relative group/item">
+                                                
+                                                <!-- Action Buttons (Edit & Delete) -->
+                                                <div class="absolute top-2 right-2 flex gap-1 opacity-0 group-hover/item:opacity-100 transition-opacity bg-white p-1 rounded-md shadow-sm border border-gray-100">
+                                                    <button @click="openEditKegiatan(kegiatan)" class="p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded" title="Edit">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                                    </button>
+                                                    <button @click="deleteKegiatan(kegiatan.id_kegiatan)" class="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded" title="Hapus">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                    </button>
+                                                </div>
+
+                                                <div class="flex justify-between items-start pr-14">
+                                                    <h5 class="text-sm font-bold text-[#213448] mb-1">Materi</h5>
+                                                </div>
+                                                <p class="text-xs text-gray-600 mb-2 whitespace-pre-wrap">{{ kegiatan.materi_kegiatan }}</p>
+                                                
+                                                <div v-if="kegiatan.catatan_pembimbing" class="mt-2 pt-2 border-t border-gray-50">
+                                                    <span class="text-[10px] uppercase font-bold text-gray-400">Catatan:</span>
+                                                    <p class="text-xs text-gray-500 italic">"{{ kegiatan.catatan_pembimbing }}"</p>
+                                                </div>
+                                            </div>
+                                        </template>
+
+                                        <!-- Placeholder jika kosong -->
+                                        <template v-else>
+                                            <div class="flex flex-col justify-center items-center text-center h-full min-h-[120px]">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                                </svg>
+                                                <p class="text-xs text-gray-400">Tidak ada kegiatan pada tanggal ini.</p>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
 
-                    <!-- BOX ANGGOTA (Kanan) -->
+                    <!-- KOLOM KANAN (ANGGOTA) -->
                     <div class="w-full lg:w-[60%]">
                         <div class="rounded-xl bg-white border border-gray-100 shadow-sm overflow-hidden h-full flex flex-col">
                             <div class="bg-[#213448] px-6 py-4 flex items-center justify-between">
@@ -117,9 +355,9 @@ const openEditAnggota = (item) => {
                                 </span>
                             </div>
 
-                            <div class="flex-1 flex flex-col max-h-[500px] overflow-y-auto">
+                            <div class="flex-1 flex flex-col max-h-[600px] overflow-y-auto">
                                 <div v-if="props.anggota.length > 0" class="divide-y divide-gray-100">
-                                    <div v-for="item in props.anggota" :key="item.id_anggota" class="p-4 hover:bg-gray-50 transition-colors flex items-center justify-between">
+                                    <div v-for="item in props.anggota" :key="item.id_anggota" class="p-4 hover:bg-gray-50 transition-colors flex items-center justify-between group/anggota">
                                         <div class="flex items-center gap-4">
                                             <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#547792]/10 text-[#547792] font-bold border border-[#547792]/20 uppercase">
                                                 {{ item.peserta?.nama_lengkap?.charAt(0) || '?' }}
@@ -131,12 +369,41 @@ const openEditAnggota = (item) => {
                                                 </p>
                                             </div>
                                         </div>
-                                        <span 
-                                            :class="item.status_aktif ? 'bg-emerald-50 text-emerald-600 ring-emerald-600/20' : 'bg-red-50 text-red-600 ring-red-600/20'" 
-                                            class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-medium ring-1 ring-inset"
-                                        >
-                                            {{ item.status_aktif ? 'Aktif' : 'Non-Aktif' }}
-                                        </span>
+                                        
+                                        <div class="flex items-center gap-3">
+                                            <!-- Toggle Status (Switch) -->
+                                            <label class="relative inline-flex items-center cursor-pointer" title="Ubah Status">
+                                                <input 
+                                                    type="checkbox" 
+                                                    class="sr-only peer" 
+                                                    :checked="item.status_aktif"
+                                                    @change="updateStatusAnggota(item)"
+                                                >
+                                                <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-200 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                                            </label>
+
+                                            <!-- Edit Button -->
+                                            <button 
+                                                @click="openEditAnggota(item)"
+                                                class="text-gray-400 hover:text-blue-500 transition opacity-0 group-hover/anggota:opacity-100"
+                                                title="Edit Data"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                </svg>
+                                            </button>
+
+                                            <!-- Delete Button -->
+                                            <button 
+                                                @click="deleteAnggota(item.id_anggota)"
+                                                class="text-gray-400 hover:text-red-500 transition opacity-0 group-hover/anggota:opacity-100"
+                                                title="Hapus Anggota"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                                 <div v-else class="p-8 flex flex-col justify-center items-center text-center h-full min-h-[150px]">
@@ -157,21 +424,50 @@ const openEditAnggota = (item) => {
             </div>
         </main>
 
+        <!-- MOUNT MODAL -->
         <ModalFormJadwal 
-            v-if="showModalJadwal"
             :show="showModalJadwal"
             :jadwalData="null" 
             :idEskul="props.eskul?.id_eskul" 
             @close="showModalJadwal = false"
         />
 
-        <!-- Menggunakan Modal Anda -->
         <ModalFormAddAnggota 
-            v-if="showModalAnggota"
             :show="showModalAnggota"
             :idEskul="props.eskul?.id_eskul"
             :anggotaData="selectedAnggota"
             @close="showModalAnggota = false"
         />
+
+        <ModalFormKegiatan
+            :show="showModalKegiatan"
+            :idEskul="props.eskul?.id_eskul"
+            :selectedDate="selectedDate"
+            :kegiatanData="selectedKegiatan"
+            @close="showModalKegiatan = false"
+        />
     </div>
 </template>
+
+<style>
+/* Override warna default v-calendar agar sesuai tema */
+.vc-blue {
+    --vc-accent-50: #f0f9ff;
+    --vc-accent-100: #e0f2fe;
+    --vc-accent-200: #bae6fd;
+    --vc-accent-300: #7dd3fc;
+    --vc-accent-400: #38bdf8;
+    --vc-accent-500: #0ea5e9;
+    --vc-accent-600: #547792;
+    --vc-accent-700: #213448;
+    --vc-accent-800: #075985;
+    --vc-accent-900: #0c4a6e;
+}
+.vc-container {
+    border: none;
+    font-family: inherit;
+}
+.vc-header {
+    padding-bottom: 10px;
+}
+</style>

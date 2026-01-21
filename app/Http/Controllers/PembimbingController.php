@@ -6,6 +6,7 @@ use App\Models\Pembimbing;
 use App\Models\Eskul;
 use App\Models\Jadwal;
 use App\Models\AnggotaEskul;
+use App\Models\Kegiatan; // Tambahkan Import Model Kegiatan
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -15,7 +16,7 @@ use Inertia\Inertia;
 class PembimbingController extends Controller
 {
     /**
-     * Menampilkan Dashboard Pembimbing dengan List Eskul.
+     * Menampilkan Dashboard Pembimbing.
      */
     public function dashboard()
     {
@@ -28,14 +29,13 @@ class PembimbingController extends Controller
     }
 
     /**
-     * Menampilkan Detail Satu Eskul (Jadwal & Anggota).
+     * Menampilkan Detail Eskul (Jadwal, Anggota, & Kegiatan).
      */
     public function show($id)
     {
         $idPembimbing = Auth::guard('pembimbing')->id();
 
-        // 1. Cari Eskul berdasarkan ID dan pastikan milik pembimbing yang login
-        // agar pembimbing lain tidak bisa intip eskul orang lain.
+        // 1. Cari Eskul (Pastikan milik pembimbing yang login)
         $eskul = Eskul::where('id_eskul', $id)
                       ->where('id_pembimbing', $idPembimbing)
                       ->firstOrFail();
@@ -48,14 +48,21 @@ class PembimbingController extends Controller
                     ->where('id_eskul', $eskul->id_eskul)
                     ->get();
 
+        // 4. Ambil Kegiatan (Terbaru diatas)
+        $kegiatan = Kegiatan::where('id_eskul', $eskul->id_eskul)
+                    ->orderBy('tanggal', 'desc')
+                    ->get();
+
         return Inertia::render('Pembimbing/EskulCardDetail', [
-            'eskul'   => $eskul,
-            'jadwal'  => $jadwal,
-            'anggota' => $anggota
+            'eskul'    => $eskul,
+            'jadwal'   => $jadwal,
+            'anggota'  => $anggota,
+            'kegiatan' => $kegiatan, // Kirim data kegiatan ke Vue
         ]);
     }
 
-    // ... (method store, update, destroy biarkan sama)
+    // --- Method CRUD Pembimbing (jika diperlukan untuk manajemen user) ---
+
     public function store(Request $request)
     {
         $validated = $request->validate([

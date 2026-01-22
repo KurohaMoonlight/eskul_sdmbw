@@ -20,7 +20,7 @@ const submit = () => {
 
 <template>
     <!-- Main Container: Full Screen, Centered Content, Background Cream #EAE0CF -->
-    <div class="flex min-h-screen w-full items-center justify-center overflow-hidden bg-[#EAE0CF] relative px-4 md:px-0">
+    <div class="flex min-h-screen w-full items-center justify-center overflow-hidden bg-[#FFF] relative px-4 md:px-0">
         
         <!-- Template Logo (Pojok Kiri Atas - Responsive) -->
         <div class="max-h-32 max-w-64 absolute top-2 left-2 md:top-2 md:left-2 z-20">

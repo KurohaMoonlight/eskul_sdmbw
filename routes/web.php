@@ -6,11 +6,14 @@ use App\Http\Controllers\PembimbingController;
 use App\Http\Controllers\EskulController;
 use App\Http\Controllers\JadwalController;
 use App\Http\Controllers\AnggotaController;
-use App\Http\Controllers\KegiatanController; // Import Controller Baru
+use App\Http\Controllers\KegiatanController;
+use App\Http\Controllers\AbsensiController; // Import AbsensiController
+use App\Http\Controllers\PrestasiController; // <--- PASTIKAN INI ADA
 use App\Models\Pembimbing;
 use App\Models\Eskul;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -74,13 +77,22 @@ Route::middleware(['auth:admin,pembimbing'])->group(function () {
     Route::put('/admin/anggota/{id}', [AnggotaController::class, 'update']);
     Route::delete('/admin/anggota/{id}', [AnggotaController::class, 'destroy']);
 
-    // CRUD Kegiatan (Baru Ditambahkan)
+    // CRUD Kegiatan
     Route::post('/admin/kegiatan', [KegiatanController::class, 'store']);
     Route::put('/admin/kegiatan/{id}', [KegiatanController::class, 'update']);
     Route::delete('/admin/kegiatan/{id}', [KegiatanController::class, 'destroy']);
 
     // Route Logout
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+
+    // Absensi
+    Route::post('/admin/absensi', [AbsensiController::class, 'store']);
+    Route::get('/admin/absensi/print', [AbsensiController::class, 'exportExcel'])->name('absensi.print');
+
+    // CRUD Prestasi (Route Baru)
+    Route::post('/admin/prestasi', [PrestasiController::class, 'store']);
+    Route::put('/admin/prestasi/{id}', [PrestasiController::class, 'update']);
+    Route::delete('/admin/prestasi/{id}', [PrestasiController::class, 'destroy']);
 });
 
 

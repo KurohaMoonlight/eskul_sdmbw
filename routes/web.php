@@ -9,6 +9,7 @@ use App\Http\Controllers\AnggotaController;
 use App\Http\Controllers\KegiatanController;
 use App\Http\Controllers\AbsensiController; // Import AbsensiController
 use App\Http\Controllers\PrestasiController; // <--- PASTIKAN INI ADA
+use App\Http\Controllers\NilaiController; // Tambahkan Import Controller Baru
 use App\Models\Pembimbing;
 use App\Models\Eskul;
 use Inertia\Inertia;
@@ -93,6 +94,9 @@ Route::middleware(['auth:admin,pembimbing'])->group(function () {
     Route::post('/admin/prestasi', [PrestasiController::class, 'store']);
     Route::put('/admin/prestasi/{id}', [PrestasiController::class, 'update']);
     Route::delete('/admin/prestasi/{id}', [PrestasiController::class, 'destroy']);
+
+    Route::post('/admin/nilai/generate', [NilaiController::class, 'generate'])->name('nilai.generate');
+    Route::put('/admin/nilai/update-bulk', [NilaiController::class, 'updateBulk'])->name('nilai.update_bulk');
 });
 
 

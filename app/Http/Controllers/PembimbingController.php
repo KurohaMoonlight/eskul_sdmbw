@@ -14,8 +14,9 @@ use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use App\Models\Absensi;
 use App\Models\Prestasi; // Tambahkan import Model Prestasi
+use App\Models\Nilai; // Tambahkan import Model Nilai
 use Illuminate\Support\Facades\Storage; // Pastikan ini diimport
-
+use Carbon\Carbon; // Import Carbon untuk tanggal
 class PembimbingController extends Controller
 {
     /**
@@ -31,6 +32,27 @@ class PembimbingController extends Controller
         ]);
     }
 
+        private function getCurrentSemesterInfo()
+    {
+        $now = Carbon::now();
+        $month = $now->month;
+        $year = $now->year;
+
+        if ($month >= 7) {
+            // Juli - Desember: Semester Ganjil, Tahun Ajaran = Tahun Ini / Tahun Depan
+            $semester = 'Ganjil';
+            $tahunAjaran = $year . '/' . ($year + 1);
+        } else {
+            // Januari - Juni: Semester Genap, Tahun Ajaran = Tahun Lalu / Tahun Ini
+            $semester = 'Genap';
+            $tahunAjaran = ($year - 1) . '/' . $year;
+        }
+
+        return [
+            'semester' => $semester,
+            'tahun_ajaran' => $tahunAjaran
+        ];
+    }
     /**
      * Menampilkan Detail Eskul (Jadwal, Anggota, & Kegiatan).
      */
@@ -84,7 +106,7 @@ class PembimbingController extends Controller
         $logs = (clone $queryLog)
             ->join('kegiatan', 'absensi.id_kegiatan', '=', 'kegiatan.id_kegiatan')
             ->orderBy('kegiatan.tanggal', 'desc')
-            ->select('absensi.*') // Pastikan select tabel utama agar tidak tertimpa join
+            ->select('absensi.*')
             ->paginate(10)
             ->withQueryString();
 
@@ -100,10 +122,20 @@ class PembimbingController extends Controller
             'total_alpha'     => $allLogs->where('status', 'Alpha')->count(),
         ];
 
-        // 4. AMBIL DATA PRESTASI (BARU)
-        $prestasi = Prestasi::with('peserta') // Load relasi peserta untuk nama siswa
+        // 4. AMBIL DATA PRESTASI
+        $prestasi = Prestasi::with('peserta')
             ->where('id_eskul', $eskul->id_eskul)
             ->orderBy('tanggal_lomba', 'desc')
+            ->get();
+
+        // 5. AMBIL DATA NILAI (DINAMIS)
+        // Menggunakan helper function untuk mendapatkan semester saat ini secara otomatis
+        $semesterInfo = $this->getCurrentSemesterInfo();
+        
+        $nilai = Nilai::with(['anggota_eskul.peserta'])
+            ->where('id_eskul', $eskul->id_eskul)
+            ->where('semester', $semesterInfo['semester'])
+            ->where('tahun_ajaran', $semesterInfo['tahun_ajaran'])
             ->get();
 
         return Inertia::render('Pembimbing/EskulCardDetail', [
@@ -114,7 +146,12 @@ class PembimbingController extends Controller
             'logs'       => $logs,
             'logSummary' => $summary,
             'filters'    => $request->only(['search', 'start_date', 'end_date', 'status']),
-            'prestasi'   => $prestasi, // <-- INI YANG HARUS DITAMBAHKAN
+            'prestasi'   => $prestasi,
+            'nilai'      => $nilai,
+            'currentSemesterInfo' => [ 
+                'semester' => $semesterInfo['semester'],
+                'tahun' => $semesterInfo['tahun_ajaran']
+            ]
         ]);
     }
     // --- Method CRUD Pembimbing (jika diperlukan untuk manajemen user) ---

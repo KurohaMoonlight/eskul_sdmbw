@@ -5,10 +5,11 @@ import Navbar from '@/Components/Navbar.vue';
 import ModalFormJadwal from '@/Components/ModalFormJadwal.vue';
 import ModalFormAddAnggota from '@/Components/ModalFormAddAnggota.vue';
 import ModalFormKegiatan from '@/Components/ModalFormKegiatan.vue';
-import ModalFormPrestasi from '@/Components/ModalFormPrestasi.vue'; // Import Modal Prestasi
+import ModalFormPrestasi from '@/Components/ModalFormPrestasi.vue'; 
 import BoxAbsensi from '@/Components/BoxAbsensi.vue';
 import BoxLogAbsensi from '@/Components/BoxLogAbsensi.vue';
 import BoxPrestasi from '@/Components/BoxPrestasi.vue'; 
+import BoxPenilaian from '@/Components/BoxPenilaian.vue'; // Import Box Penilaian
 import { Calendar } from 'v-calendar';
 import 'v-calendar/style.css';
 import Swal from 'sweetalert2';
@@ -43,6 +44,15 @@ const props = defineProps({
     prestasi: {
         type: Array,
         default: () => []
+    },
+    // Props untuk Penilaian
+    nilai: {
+        type: Array,
+        default: () => []
+    },
+    currentSemesterInfo: {
+        type: Object,
+        default: () => ({ semester: 'Ganjil', tahun: '2025/2026' })
     }
 });
 
@@ -55,11 +65,11 @@ const formatTime = (time) => {
 const showModalJadwal = ref(false);
 const showModalAnggota = ref(false);
 const showModalKegiatan = ref(false);
-const showModalPrestasi = ref(false); // State Modal Prestasi
+const showModalPrestasi = ref(false); 
 
 const selectedAnggota = ref(null);
 const selectedKegiatan = ref(null);
-const selectedPrestasi = ref(null); // Data Edit Prestasi
+const selectedPrestasi = ref(null); 
 const selectedDate = ref(new Date());
 
 const calendarAttributes = computed(() => {
@@ -301,7 +311,7 @@ const openEditPrestasi = (item) => {
                                             <template v-else>
                                                 <div class="flex flex-col justify-center items-center text-center h-full min-h-[120px]">
                                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                                     </svg>
                                                     <p class="text-xs text-gray-400">Tidak ada kegiatan pada tanggal ini.</p>
                                                 </div>
@@ -388,8 +398,19 @@ const openEditPrestasi = (item) => {
                         <BoxPrestasi 
                             :prestasi="props.prestasi"
                             :idEskul="props.eskul?.id_eskul"
+                            :anggota="props.anggota"
                             @edit="openEditPrestasi" 
                             @add="openTambahPrestasi"
+                        />
+                    </div>
+
+                    <!-- ROW 5: BOX PENILAIAN (Di Bawah Prestasi) -->
+                    <div class="w-full">
+                        <BoxPenilaian 
+                            :nilai="props.nilai"
+                            :anggota="props.anggota"
+                            :idEskul="props.eskul?.id_eskul"
+                            :currentSemesterInfo="props.currentSemesterInfo"
                         />
                     </div>
 

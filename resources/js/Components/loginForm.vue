@@ -26,24 +26,23 @@ const submit = () => {
         <div class="max-h-32 max-w-64 absolute top-2 left-2 md:top-2 md:left-2 z-20">
             <!-- Placeholder Logo -->
             <img src="../../../public/Img/logo.png" class=" hover:scale-105 transition-transform"/>
-     
         </div>
 
         <!-- Background SVG Decoration (Absolute Full Screen) -->
         <div class="absolute inset-0 z-0 pointer-events-none">
             <svg class="w-full h-full" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-                <!-- Lingkaran Besar Utama (Dark Blue) -->
-                <circle cx="720" cy="450" r="400" fill="#213448" opacity="0.05" />
+                <!-- Lingkaran Besar Utama (Dark Blue) - Animasi Rotate & Pulse -->
+                <circle cx="720" cy="450" r="400" fill="#213448" opacity="0.05" class="animate-blob-slow origin-center" />
                 
-                <!-- Lingkaran Medium (Medium Blue) -->
-                <circle cx="200" cy="200" r="150" fill="#547792" opacity="0.1" />
+                <!-- Lingkaran Medium (Medium Blue) - Animasi Float Kiri -->
+                <circle cx="200" cy="200" r="150" fill="#547792" opacity="0.1" class="animate-float-left" />
                 
-                <!-- Lingkaran Light (Light Blue) -->
-                <circle cx="1200" cy="700" r="200" fill="#94B4C1" opacity="0.1" />
+                <!-- Lingkaran Light (Light Blue) - Animasi Float Kanan -->
+                <circle cx="1200" cy="700" r="200" fill="#94B4C1" opacity="0.1" class="animate-float-right" />
                 
-                <!-- Aksen Garis Melengkung -->
-                <path d="M0,450 Q720,900 1440,450" fill="none" stroke="#547792" stroke-width="2" opacity="0.1" />
-                <path d="M0,500 Q720,950 1440,500" fill="none" stroke="#94B4C1" stroke-width="2" opacity="0.2" />
+                <!-- Aksen Garis Melengkung - Animasi Dash / Gerak Halus -->
+                <path d="M0,450 Q720,900 1440,450" fill="none" stroke="#547792" stroke-width="2" opacity="0.1" class="animate-wave-slow" />
+                <path d="M0,500 Q720,950 1440,500" fill="none" stroke="#94B4C1" stroke-width="2" opacity="0.2" class="animate-wave-fast" />
             </svg>
         </div>
 
@@ -51,13 +50,13 @@ const submit = () => {
         <div class="w-full max-w-md relative z-10">
             
             <!-- Logo Area (Responsive Text) -->
-            <div class="mb-6 md:mb-10 flex flex-col items-center text-center">
+            <div class="mb-6 md:mb-10 flex flex-col items-center text-center animate-fade-in-down">
                 <h1 class="mt-4 text-2xl md:text-3xl font-bold text-[#213448]">SD Muhammadiyah Birrul Walidain</h1>
                 <p class="text-[#547792] text-sm md:text-lg">Sistem Informasi Ekstrakurikuler</p>
             </div>
 
             <!-- Form (Responsive Padding & Radius) -->
-            <form @submit.prevent="submit" class="w-full space-y-5 md:space-y-6 bg-white/30 backdrop-blur-sm p-6 md:p-8 rounded-xl md:rounded-2xl shadow-sm border border-white/40">
+            <form @submit.prevent="submit" class="w-full space-y-5 md:space-y-6 bg-white/30 backdrop-blur-sm p-6 md:p-8 rounded-xl md:rounded-2xl shadow-sm border border-white/40 animate-fade-in-up">
                 
                 <!-- Input Username -->
                 <div class="flex flex-col space-y-2">
@@ -112,7 +111,7 @@ const submit = () => {
                     </div>
                 </div>
 
-                <!-- Checkbox Remember Me (Tambahkan di sini sebelum tombol login) -->
+                <!-- Checkbox Remember Me -->
                 <div class="flex items-center">
                     <label class="flex items-center gap-2 cursor-pointer">
                         <input 
@@ -147,3 +146,69 @@ const submit = () => {
         </div>
     </div>
 </template>
+
+<style scoped>
+/* Keyframes untuk Animasi Blob (Rotate & Scale) */
+@keyframes blob-slow {
+    0% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(30px, -50px) scale(1.1); }
+    66% { transform: translate(-20px, 20px) scale(0.9); }
+    100% { transform: translate(0, 0) scale(1); }
+}
+
+@keyframes float-left {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(-20px, 20px); }
+}
+
+@keyframes float-right {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(20px, -20px); }
+}
+
+/* Keyframes untuk Gelombang (Wave) - Bergerak menyamping */
+@keyframes wave-move {
+    0% { transform: translateX(0); }
+    50% { transform: translateX(-20px); }
+    100% { transform: translateX(0); }
+}
+
+@keyframes fade-in-down {
+    0% { opacity: 0; transform: translateY(-20px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in-up {
+    0% { opacity: 0; transform: translateY(20px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Class Utilities untuk Animasi */
+.animate-blob-slow {
+    animation: blob-slow 20s infinite ease-in-out;
+}
+
+.animate-float-left {
+    animation: float-left 10s infinite ease-in-out;
+}
+
+.animate-float-right {
+    animation: float-right 12s infinite ease-in-out;
+}
+
+.animate-wave-slow {
+    animation: wave-move 8s infinite ease-in-out;
+}
+
+.animate-wave-fast {
+    animation: wave-move 6s infinite ease-in-out reverse;
+}
+
+.animate-fade-in-down {
+    animation: fade-in-down 0.8s ease-out;
+}
+
+.animate-fade-in-up {
+    animation: fade-in-up 0.8s ease-out 0.2s backwards; /* Delay sedikit agar muncul setelah judul */
+}
+</style>

@@ -90,7 +90,7 @@ class AbsensiExport implements FromCollection, WithHeadings, WithMapping, WithSt
         return [
             ['LAPORAN ABSENSI EKSTRAKURIKULER'],
             [strtoupper($this->eskulName)],
-            ['SD MUHAMMADIYAH BONDOWOSO'],
+            ['SD Muhammadiyah Birrul Walidain'],
             [' '], // Spasi
             ['NO', 'TANGGAL', 'NAMA SISWA', 'KELAS', 'STATUS', 'MATERI KEGIATAN'], // Header Tabel Data
         ];

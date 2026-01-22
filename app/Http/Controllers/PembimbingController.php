@@ -6,33 +6,24 @@ use App\Models\Pembimbing;
 use App\Models\Eskul;
 use App\Models\Jadwal;
 use App\Models\AnggotaEskul;
-use App\Models\Kegiatan; // Tambahkan Import Model Kegiatan
+use App\Models\Kegiatan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use App\Models\Absensi;
-use App\Models\Prestasi; // Tambahkan import Model Prestasi
-use App\Models\Nilai; // Tambahkan import Model Nilai
-use Illuminate\Support\Facades\Storage; // Pastikan ini diimport
-use Carbon\Carbon; // Import Carbon untuk tanggal
+use App\Models\Prestasi;
+use App\Models\Nilai;
+use Illuminate\Support\Facades\Storage;
+use Carbon\Carbon;
+
 class PembimbingController extends Controller
 {
     /**
-     * Menampilkan Dashboard Pembimbing.
+     * Helper: Menentukan Tahun Ajaran & Semester saat ini
      */
-    public function dashboard()
-    {
-        $idPembimbing = Auth::guard('pembimbing')->id();
-        $listEskul = Eskul::where('id_pembimbing', $idPembimbing)->get();
-
-        return Inertia::render('Pembimbing/Dashboard', [
-            'eskul_list' => $listEskul
-        ]);
-    }
-
-        private function getCurrentSemesterInfo()
+    private function getCurrentSemesterInfo()
     {
         $now = Carbon::now();
         $month = $now->month;
@@ -53,6 +44,20 @@ class PembimbingController extends Controller
             'tahun_ajaran' => $tahunAjaran
         ];
     }
+
+    /**
+     * Menampilkan Dashboard Pembimbing.
+     */
+    public function dashboard()
+    {
+        $idPembimbing = Auth::guard('pembimbing')->id();
+        $listEskul = Eskul::where('id_pembimbing', $idPembimbing)->get();
+
+        return Inertia::render('Pembimbing/Dashboard', [
+            'eskul_list' => $listEskul
+        ]);
+    }
+
     /**
      * Menampilkan Detail Eskul (Jadwal, Anggota, & Kegiatan).
      */
@@ -74,7 +79,7 @@ class PembimbingController extends Controller
                     ->orderBy('tanggal', 'desc')
                     ->get();
 
-        // 3. LOGIKA FILTER LOG ABSENSI
+        // 3. LOGIKA FILTER LOG ABSENSI (DIPERBAIKI)
         $queryLog = Absensi::with(['peserta', 'kegiatan'])
             ->whereHas('kegiatan', function($q) use ($id) {
                 $q->where('id_eskul', $id);
@@ -99,18 +104,18 @@ class PembimbingController extends Controller
             });
         }
 
-        // Clone query untuk statistik sebelum dipaginate
+        // Clone query untuk statistik (mengambil semua data tanpa limit pagination)
         $allLogs = $queryLog->get(); 
         
-        // Paginasi Log
+        // Paginasi Log untuk Tabel (Limit 10)
         $logs = (clone $queryLog)
             ->join('kegiatan', 'absensi.id_kegiatan', '=', 'kegiatan.id_kegiatan')
             ->orderBy('kegiatan.tanggal', 'desc')
-            ->select('absensi.*')
+            ->select('absensi.*') // Pastikan select tabel utama agar tidak tertimpa join
             ->paginate(10)
             ->withQueryString();
 
-        // Hitung Statistik
+        // Hitung Statistik (DIPERBAIKI)
         $totalData = $allLogs->count();
         $totalHadir = $allLogs->where('status', 'Hadir')->count();
         
@@ -128,15 +133,29 @@ class PembimbingController extends Controller
             ->orderBy('tanggal_lomba', 'desc')
             ->get();
 
-        // 5. AMBIL DATA NILAI (DINAMIS)
-        // Menggunakan helper function untuk mendapatkan semester saat ini secara otomatis
+        // 5. AMBIL DATA NILAI
         $semesterInfo = $this->getCurrentSemesterInfo();
-        
+        $idKegiatanSemester = Kegiatan::where('id_eskul', $id)->pluck('id_kegiatan');
+
         $nilai = Nilai::with(['anggota_eskul.peserta'])
             ->where('id_eskul', $eskul->id_eskul)
             ->where('semester', $semesterInfo['semester'])
             ->where('tahun_ajaran', $semesterInfo['tahun_ajaran'])
-            ->get();
+            ->get()
+            ->map(function ($item) use ($idKegiatanSemester) {
+                $idPeserta = $item->anggota_eskul->id_peserta;
+                $hadir = Absensi::whereIn('id_kegiatan', $idKegiatanSemester)
+                    ->where('id_peserta', $idPeserta)
+                    ->where('status', 'Hadir')
+                    ->count();
+                $totalPertemuan = $idKegiatanSemester->count();
+
+                $item->statistik_hadir = $hadir;
+                $item->total_pertemuan = $totalPertemuan;
+                $item->persentase_hadir = $totalPertemuan > 0 ? round(($hadir / $totalPertemuan) * 100) : 0;
+
+                return $item;
+            });
 
         return Inertia::render('Pembimbing/EskulCardDetail', [
             'eskul'      => $eskul,
@@ -144,17 +163,18 @@ class PembimbingController extends Controller
             'anggota'    => $anggota,
             'kegiatan'   => $kegiatan,
             'logs'       => $logs,
-            'logSummary' => $summary,
+            'logSummary' => $summary, // Kirim data summary yang sudah dihitung
             'filters'    => $request->only(['search', 'start_date', 'end_date', 'status']),
             'prestasi'   => $prestasi,
-            'nilai'      => $nilai,
+            'nilai'      => $nilai, 
             'currentSemesterInfo' => [ 
                 'semester' => $semesterInfo['semester'],
                 'tahun' => $semesterInfo['tahun_ajaran']
             ]
         ]);
     }
-    // --- Method CRUD Pembimbing (jika diperlukan untuk manajemen user) ---
+
+    // --- Method CRUD Pembimbing (Sama seperti sebelumnya) ---
 
     public function store(Request $request)
     {
@@ -204,15 +224,9 @@ class PembimbingController extends Controller
 
     public function destroy($id)
     {
-        $prestasi = Prestasi::findOrFail($id);
+        $pembimbing = Pembimbing::findOrFail($id);
+        $pembimbing->delete();
 
-        // Hapus file fisik dari storage jika ada
-        if ($prestasi->foto_prestasi) {
-            Storage::disk('public')->delete($prestasi->foto_prestasi);
-        }
-
-        $prestasi->delete();
-
-        return back()->with('success', 'Prestasi dihapus.');
+        return back();
     }
 }

@@ -95,8 +95,10 @@ Route::middleware(['auth:admin,pembimbing'])->group(function () {
     Route::put('/admin/prestasi/{id}', [PrestasiController::class, 'update']);
     Route::delete('/admin/prestasi/{id}', [PrestasiController::class, 'destroy']);
 
+    // CRUD Nilai (Route Baru)
     Route::post('/admin/nilai/generate', [NilaiController::class, 'generate'])->name('nilai.generate');
     Route::put('/admin/nilai/update-bulk', [NilaiController::class, 'updateBulk'])->name('nilai.update_bulk');
+    Route::get('/admin/nilai/export', [NilaiController::class, 'exportExcel'])->name('nilai.export');
 });
 
 

@@ -17,7 +17,7 @@ const props = defineProps({
         type: Object,
         default: () => ({ semester: 'Ganjil', tahun: '2025/2026' })
     },
-    errors: Object // Terima props errors dari Inertia
+    errors: Object 
 });
 
 // State Editing
@@ -38,7 +38,6 @@ const updateForm = useForm({
 });
 
 const initializePenilaian = () => {
-    // Pastikan ID Eskul terisi sebelum kirim
     generateForm.id_eskul = props.idEskul;
     generateForm.semester = props.currentSemesterInfo.semester;
     generateForm.tahun_ajaran = props.currentSemesterInfo.tahun;
@@ -55,13 +54,8 @@ const initializePenilaian = () => {
                 preserveScroll: true,
                 onSuccess: () => {
                     Swal.fire('Berhasil', 'Periode penilaian dibuka.', 'success');
-                    // Paksa reload props jika perlu, meski biasanya back() sudah cukup
-                    // router.reload({ only: ['nilai'] }); 
                 },
                 onError: (errors) => {
-                    // Tampilkan error jika gagal (misal: tidak ada anggota aktif)
-                    // Pesan error dari controller ada di errors.message (jika pakai withErrors)
-                    // atau di flash message.
                     let msg = errors.message || 'Gagal membuka periode penilaian. Pastikan ada anggota aktif.';
                     Swal.fire('Gagal', msg, 'error');
                 }
@@ -96,6 +90,19 @@ const saveNilai = () => {
     });
 };
 
+// Fungsi Download Excel
+const downloadExcel = () => {
+    // Bangun URL dengan query string
+    const params = new URLSearchParams({
+        id_eskul: props.idEskul,
+        semester: props.currentSemesterInfo.semester,
+        tahun_ajaran: props.currentSemesterInfo.tahun
+    }).toString();
+    
+    // Buka di tab baru agar download berjalan
+    window.open(`/admin/nilai/export?${params}`, '_blank');
+};
+
 const getPredikat = (n1, n2, n3) => {
     const avg = (n1 + n2 + n3) / 3;
     if (avg >= 90) return 'A';
@@ -120,7 +127,20 @@ const getPredikat = (n1, n2, n3) => {
                 <span class="text-[#94B4C1] text-xs font-mono bg-[#94B4C1]/10 px-2 py-1 rounded">
                     {{ currentSemesterInfo.semester }} {{ currentSemesterInfo.tahun }}
                 </span>
-                <div v-if="hasData">
+                
+                <!-- Group Tombol Aksi -->
+                <div v-if="hasData" class="flex gap-2">
+                    
+                    <!-- Tombol Download Excel (Baru) -->
+                    <button 
+                        @click="downloadExcel"
+                        class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded hover:bg-emerald-700 transition flex items-center gap-1 font-bold shadow-sm"
+                        title="Download Laporan Nilai"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                        Excel
+                    </button>
+
                     <button v-if="!isEditing" @click="toggleEdit" class="text-xs bg-white/10 text-white px-3 py-1.5 rounded hover:bg-white hover:text-[#213448] transition flex items-center gap-1 font-bold shadow-sm">
                         Edit Nilai
                     </button>
@@ -146,7 +166,6 @@ const getPredikat = (n1, n2, n3) => {
                 Data penilaian semester ini belum tersedia. Pastikan ada anggota aktif di tahun ajaran <strong>{{ currentSemesterInfo.tahun }}</strong>.
             </p>
             
-            <!-- Tampilkan Error Message dari Backend jika ada -->
             <div v-if="$page.props.errors?.message" class="mb-4 text-red-500 text-sm font-bold bg-red-50 px-4 py-2 rounded">
                 {{ $page.props.errors.message }}
             </div>
@@ -163,6 +182,7 @@ const getPredikat = (n1, n2, n3) => {
                 <thead class="bg-gray-50 text-gray-500 text-xs uppercase font-bold tracking-wider">
                     <tr>
                         <th class="px-6 py-3 border-b border-gray-100">Anggota</th>
+                        <th class="px-4 py-3 border-b border-gray-100 text-center w-24">% Hadir</th>
                         <th class="px-4 py-3 border-b border-gray-100 text-center w-24">Disiplin</th>
                         <th class="px-4 py-3 border-b border-gray-100 text-center w-24">Teknik</th>
                         <th class="px-4 py-3 border-b border-gray-100 text-center w-24">Kerjasama</th>
@@ -183,6 +203,18 @@ const getPredikat = (n1, n2, n3) => {
                                 </div>
                             </div>
                         </td>
+                        
+                        <!-- Kolom Persentase Hadir (Read Only) -->
+                        <td class="px-4 py-3 text-center">
+                            <span 
+                                class="inline-flex items-center justify-center px-2 py-1 rounded text-xs font-bold border"
+                                :class="item.persentase_hadir >= 75 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'"
+                                :title="`${item.statistik_hadir} dari ${item.total_pertemuan} pertemuan`"
+                            >
+                                {{ item.persentase_hadir }}%
+                            </span>
+                        </td>
+
                         <td class="px-4 py-3 text-center">
                             <input v-if="isEditing" type="number" min="0" max="100" v-model="updateForm.nilai_data[index].nilai_disiplin" class="w-16 px-1 py-1 text-center text-sm border border-gray-300 rounded focus:ring-[#547792]">
                             <span v-else class="text-sm font-medium text-gray-700">{{ item.nilai_disiplin }}</span>

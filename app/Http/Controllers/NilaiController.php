@@ -6,6 +6,9 @@ use App\Models\Nilai;
 use App\Models\AnggotaEskul;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Models\Eskul; // Import Eskul
+use App\Exports\NilaiExport; // Import Export Class
+use Maatwebsite\Excel\Facades\Excel; // Import Excel Facade
 
 class NilaiController extends Controller
 {
@@ -89,5 +92,32 @@ class NilaiController extends Controller
         });
 
         return back()->with('success', 'Data nilai berhasil diperbarui.');
+    }
+
+    public function exportExcel(Request $request)
+    {
+        $request->validate([
+            'id_eskul' => 'required|exists:eskul,id_eskul',
+            'semester' => 'required|string',
+            'tahun_ajaran' => 'required|string',
+        ]);
+
+        $eskul = Eskul::with('pembimbing')->find($request->id_eskul);
+        $pembimbingName = $eskul->pembimbing ? $eskul->pembimbing->nama_lengkap : '.........................';
+
+        // Bersihkan nama file dari karakter aneh
+        $cleanSemester = str_replace('/', '-', $request->tahun_ajaran); // 2025/2026 -> 2025-2026
+        $fileName = 'Nilai_' . str_replace(' ', '_', $eskul->nama_eskul) . '_' . $cleanSemester . '_' . $request->semester . '.xlsx';
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new NilaiExport(
+                $request->id_eskul, 
+                $request->semester, 
+                $request->tahun_ajaran, 
+                $eskul->nama_eskul, 
+                $pembimbingName
+            ), 
+            $fileName
+        );
     }
 }

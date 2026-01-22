@@ -1,31 +1,43 @@
 <script setup>
 import { ref, watch, computed } from 'vue';
 import { router, Link } from '@inertiajs/vue3';
-import { debounce } from 'lodash'; // Pastikan lodash ada (bawaan Laravel/Inertia biasanya ada)
+import { debounce } from 'lodash'; 
 
 const props = defineProps({
-    // Data Log (Paginated dari Controller)
     logs: {
         type: Object,
         default: () => ({ data: [], links: [] }) 
     },
-    // Data Rekap (Dikirim dari Controller)
+    // Data Rekap - Pastikan nama prop ini sesuai dengan yang dikirim dari parent (:summary="logSummary")
     summary: {
         type: Object,
+        // Default value jika data belum tersedia
         default: () => ({
             total_pertemuan: 0,
-            avg_kehadiran: 0, // Dalam persen
+            avg_kehadiran: 0, 
             total_sakit: 0,
             total_izin: 0,
             total_alpha: 0
         })
     },
-    // Filter State (agar input tidak reset saat reload)
     filters: {
         type: Object,
         default: () => ({ search: '', start_date: '', end_date: '', status: '' })
     },
     idEskul: [Number, String]
+});
+
+// Computed safe summary untuk menangani jika props.summary null/undefined
+// Gunakan 's' ini di template daripada props.summary langsung
+const s = computed(() => {
+    return {
+        total_pertemuan: props.summary?.total_pertemuan ?? 0,
+        // Pastikan konversi ke Number agar tidak error saat render grafik
+        avg_kehadiran: Number(props.summary?.avg_kehadiran ?? 0),
+        total_sakit: props.summary?.total_sakit ?? 0,
+        total_izin: props.summary?.total_izin ?? 0,
+        total_alpha: props.summary?.total_alpha ?? 0,
+    }
 });
 
 // State Lokal untuk Filter
@@ -34,37 +46,33 @@ const startDate = ref(props.filters.start_date || '');
 const endDate = ref(props.filters.end_date || '');
 const statusFilter = ref(props.filters.status || '');
 
-// Fungsi Reload Data (Server-side Filtering)
-// Menggunakan debounce untuk search agar tidak spam request
 const applyFilter = debounce(() => {
     router.get(
-        `/pembimbing/eskul/${props.idEskul}`, // URL halaman ini
+        `/pembimbing/eskul/${props.idEskul}`, 
         { 
-            // Kirim parameter query string
             search: search.value,
             start_date: startDate.value,
             end_date: endDate.value,
             status: statusFilter.value,
-            // Marker agar controller tahu kita minta data log, bukan cuma load halaman biasa
-            // (Opsional, tergantung strategi controller Anda nanti)
+            // Mode khusus untuk memberitahu controller ini request log filter (opsional, tergantung implementasi controller)
             mode: 'log_filter' 
         },
         { 
-            preserveState: true, // Jangan refresh full page
-            preserveScroll: true, // Jangan scroll ke atas
-            only: ['logs', 'summary', 'filters'] // Hanya update props ini
+            preserveState: true, 
+            preserveScroll: true, 
+            // PENTING: Gunakan 'logSummary' jika itu nama variabel yang dikirim dari Controller/Parent ke Inertia
+            // Namun, karena di parent kita mem-passnya ke prop 'summary', saat partial reload 
+            // kita harus me-reload data parent ('logSummary') agar prop 'summary' anak ikut terupdate.
+            only: ['logs', 'logSummary', 'filters'] 
         }
     );
 }, 500);
 
-// Watchers
 watch(search, applyFilter);
 watch(statusFilter, applyFilter);
 watch([startDate, endDate], applyFilter);
 
-// Fungsi Cetak
 const printLog = () => {
-    // Membuka tab baru ke endpoint cetak dengan filter yang sedang aktif
     const params = new URLSearchParams({
         start_date: startDate.value,
         end_date: endDate.value,
@@ -74,7 +82,6 @@ const printLog = () => {
     window.open(`/admin/absensi/print?${params}`, '_blank');
 };
 
-// Helper Warna Status
 const getStatusBadge = (status) => {
     switch(status) {
         case 'Hadir': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
@@ -90,19 +97,27 @@ const getStatusBadge = (status) => {
     <div class="space-y-6">
         
         <!-- 1. REKAPITULASI CEPAT (STAT CARDS) -->
+        <!-- Debugging: Tampilkan raw data jika masih error -->
+        <!-- <pre>{{ props.summary }}</pre> -->
+
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
             <!-- Card 1: Total Pertemuan -->
             <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-center items-center text-center">
                 <span class="text-xs text-gray-400 font-bold uppercase tracking-wider">Total Pertemuan</span>
-                <span class="text-2xl font-bold text-[#213448] mt-1">{{ summary.total_pertemuan }}</span>
+                <!-- Gunakan s.total_pertemuan -->
+                <span class="text-2xl font-bold text-[#213448] mt-1">{{ s.total_pertemuan }}</span>
                 <span class="text-[10px] text-gray-400">Sesi terlaksana</span>
             </div>
 
             <!-- Card 2: Rata-rata Kehadiran -->
             <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-center items-center text-center relative overflow-hidden">
-                <div class="absolute bottom-0 left-0 h-1 bg-emerald-500" :style="{ width: summary.avg_kehadiran + '%' }"></div>
+                <!-- Bar Indikator di Bawah -->
+                <div class="absolute bottom-0 left-0 h-1.5 bg-gray-100 w-full">
+                    <div class="h-full bg-emerald-500 transition-all duration-500" :style="{ width: s.avg_kehadiran + '%' }"></div>
+                </div>
+                
                 <span class="text-xs text-gray-400 font-bold uppercase tracking-wider">Rata-rata Hadir</span>
-                <span class="text-2xl font-bold text-emerald-600 mt-1">{{ summary.avg_kehadiran }}%</span>
+                <span class="text-2xl font-bold text-emerald-600 mt-1">{{ s.avg_kehadiran }}%</span>
                 <span class="text-[10px] text-gray-400">Partisipasi siswa</span>
             </div>
 
@@ -110,9 +125,9 @@ const getStatusBadge = (status) => {
             <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-center items-center text-center">
                 <span class="text-xs text-gray-400 font-bold uppercase tracking-wider">Sakit / Izin</span>
                 <div class="flex gap-2 mt-1">
-                    <span class="text-lg font-bold text-yellow-600">{{ summary.total_sakit }}S</span>
+                    <span class="text-lg font-bold text-yellow-600">{{ s.total_sakit }}S</span>
                     <span class="text-gray-300">|</span>
-                    <span class="text-lg font-bold text-blue-600">{{ summary.total_izin }}I</span>
+                    <span class="text-lg font-bold text-blue-600">{{ s.total_izin }}I</span>
                 </div>
                 <span class="text-[10px] text-gray-400">Total akumulasi</span>
             </div>
@@ -120,7 +135,7 @@ const getStatusBadge = (status) => {
             <!-- Card 4: Alpha -->
             <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-center items-center text-center">
                 <span class="text-xs text-gray-400 font-bold uppercase tracking-wider">Tanpa Keterangan</span>
-                <span class="text-2xl font-bold text-red-600 mt-1">{{ summary.total_alpha }}</span>
+                <span class="text-2xl font-bold text-red-600 mt-1">{{ s.total_alpha }}</span>
                 <span class="text-[10px] text-gray-400">Total Alpha</span>
             </div>
         </div>
@@ -157,14 +172,12 @@ const getStatusBadge = (status) => {
                         v-model="startDate"
                         type="date" 
                         class="py-1.5 px-2 text-sm rounded-lg border-none bg-white/10 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#547792] w-32"
-                        title="Tanggal Mulai"
                     >
                     <span class="text-gray-400">-</span>
                     <input 
                         v-model="endDate"
                         type="date" 
                         class="py-1.5 px-2 text-sm rounded-lg border-none bg-white/10 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#547792] w-32"
-                        title="Tanggal Selesai"
                     >
 
                     <!-- Status Filter -->
@@ -241,7 +254,7 @@ const getStatusBadge = (status) => {
 
                 <div class="flex items-center gap-4">
                     <!-- Pagination Links -->
-                    <div class="flex gap-1" v-if="logs.links.length > 3">
+                    <div class="flex gap-1" v-if="logs.links && logs.links.length > 3">
                         <template v-for="(link, key) in logs.links" :key="key">
                             <Link 
                                 v-if="link.url"
@@ -256,7 +269,7 @@ const getStatusBadge = (status) => {
                         </template>
                     </div>
 
-                    <!-- Tombol Cetak -->
+                    <!-- Tombol Download Excel -->
                     <button 
                         @click="printLog"
                         class="flex items-center gap-2 rounded-lg bg-emerald-600 border border-emerald-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition"

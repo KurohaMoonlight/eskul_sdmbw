@@ -3,79 +3,60 @@
 namespace App\Http\Controllers;
 
 use App\Models\Eskul;
-use Illuminate\Http\Request;
-use Inertia\Inertia; // Wajib import Inertia untuk method show()\
-use App\Models\Pembimbing;
+use App\Http\Requests\StoreEskulRequest;
+use App\Http\Requests\UpdateEskulRequest;
+use App\Services\EskulService;
+use Inertia\Inertia;
+use Illuminate\Http\RedirectResponse;
 
 class EskulController extends Controller
 {
+    protected $eskulService;
+
+    public function __construct(EskulService $eskulService)
+    {
+        $this->eskulService = $eskulService;
+    }
+
     /**
      * Menyimpan data eskul baru.
      */
-    public function store(Request $request)
+    public function store(StoreEskulRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'nama_eskul'        => 'required|string|max:50',
-            'id_pembimbing'     => 'required|exists:pembimbing,id_pembimbing',
-            'deskripsi'         => 'nullable|string',
-            'jenjang_kelas_min' => 'required|in:1,2,3,4,5,6',
-            'jenjang_kelas_max' => 'required|in:1,2,3,4,5,6',
-        ]);
+        $this->eskulService->createEskul($request->validated());
 
-        Eskul::create($validated);
-
-        return back();
+        return back()->with('success', 'Eskul berhasil ditambahkan.');
     }
 
     /**
-     * Menampilkan Detail Eskul (Page Baru).
+     * Menampilkan detail eskul (Admin View).
      */
-   public function show($id)
+    public function show($id)
     {
-        $eskul = Eskul::with(['pembimbing', 'jadwal', 'anggota_eskul.peserta'])
-            ->findOrFail($id);
+        $data = $this->eskulService->getEskulDetail($id);
 
-        // Ambil list pembimbing untuk dropdown edit
-        $pembimbings = Pembimbing::orderBy('nama_lengkap', 'asc')->get();
-
-        return Inertia::render('Admin/Eskul/Detail', [
-            'eskul' => $eskul,
-            'pembimbings' => $pembimbings // Kirim ke Vue
-        ]);
+        return Inertia::render('Admin/Eskul/Detail', $data);
     }
+
     /**
      * Memperbarui data eskul.
      */
-    public function update(Request $request, $id)
+    public function update(UpdateEskulRequest $request, $id): RedirectResponse
     {
         $eskul = Eskul::findOrFail($id);
+        $this->eskulService->updateEskul($eskul, $request->validated());
 
-        $validated = $request->validate([
-            'nama_eskul'        => 'required|string|max:50',
-            'id_pembimbing'     => 'required|exists:pembimbing,id_pembimbing',
-            'deskripsi'         => 'nullable|string',
-            'jenjang_kelas_min' => 'required|in:1,2,3,4,5,6',
-            'jenjang_kelas_max' => 'required|in:1,2,3,4,5,6',
-        ]);
-
-        $eskul->update($validated);
-
-        return back();
+        return back()->with('success', 'Data eskul diperbarui.');
     }
 
     /**
      * Menghapus data eskul.
      */
-    public function destroy($id)
+    public function destroy($id): RedirectResponse
     {
         $eskul = Eskul::findOrFail($id);
-        $eskul->delete();
+        $this->eskulService->deleteEskul($eskul);
 
-        // Jika referer berasal dari halaman detail, redirect ke dashboard
-        if (request()->headers->get('referer') && str_contains(request()->headers->get('referer'), 'admin/eskul/')) {
-            return to_route('admin.dashboard');
-        }
-
-        return back();
+        return back()->with('success', 'Eskul dihapus.');
     }
 }

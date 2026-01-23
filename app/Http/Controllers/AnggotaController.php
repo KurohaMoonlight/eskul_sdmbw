@@ -2,97 +2,66 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Peserta;
 use App\Models\AnggotaEskul;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use App\Http\Requests\StoreAnggotaRequest;
+use App\Http\Requests\UpdateAnggotaRequest;
+use App\Services\AnggotaService;
+use Illuminate\Http\RedirectResponse;
 
 class AnggotaController extends Controller
 {
+    protected $anggotaService;
+
     /**
-     * Menyimpan Peserta Baru sekaligus mendaftarkan ke Eskul
+     * Inject AnggotaService melalui constructor.
+     * Dependency Injection ini membuat controller lebih testable dan decoupled.
      */
-    public function store(Request $request)
+    public function __construct(AnggotaService $anggotaService)
     {
-        $request->validate([
-            'nama_lengkap'  => 'required|string|max:100',
-            'tingkat_kelas' => 'required|string|max:20',
-            'jenis_kelamin' => 'required|in:L,P',
-            'id_eskul'      => 'required|exists:eskul,id_eskul',
-            'tahun_ajaran'  => 'required|string|max:10',
-        ]);
-
-        DB::transaction(function () use ($request) {
-            $peserta = Peserta::create([
-                'nama_lengkap'  => $request->nama_lengkap,
-                'tingkat_kelas' => $request->tingkat_kelas,
-                'jenis_kelamin' => $request->jenis_kelamin,
-            ]);
-
-            AnggotaEskul::create([
-                'id_eskul'     => $request->id_eskul,
-                'id_peserta'   => $peserta->id_peserta,
-                'tahun_ajaran' => $request->tahun_ajaran,
-                'status_aktif' => true,
-            ]);
-        });
-
-        return back();
+        $this->anggotaService = $anggotaService;
     }
 
     /**
-     * Update Data Anggota & Peserta
+     * Menyimpan data anggota baru.
+     * * @param StoreAnggotaRequest $request Request yang sudah tervalidasi otomatis
+     * @return RedirectResponse
      */
-    public function update(Request $request, $id)
+    public function store(StoreAnggotaRequest $request): RedirectResponse
     {
-        $anggota = AnggotaEskul::findOrFail($id);
-        
-        $request->validate([
-            'nama_lengkap'  => 'required|string|max:100',
-            'tingkat_kelas' => 'required|string|max:20',
-            'jenis_kelamin' => 'required|in:L,P',
-            'tahun_ajaran'  => 'required|string|max:10',
-            'status_aktif'  => 'required|boolean',
-        ]);
+        // Panggil service untuk menangani logika simpan
+        $this->anggotaService->createAnggota($request->validated());
 
-        DB::transaction(function () use ($request, $anggota) {
-            // 1. Update Data Peserta (Master Siswa)
-            $anggota->peserta->update([
-                'nama_lengkap'  => $request->nama_lengkap,
-                'tingkat_kelas' => $request->tingkat_kelas,
-                'jenis_kelamin' => $request->jenis_kelamin,
-            ]);
-
-            // 2. Update Data Keanggotaan
-            $anggota->update([
-                'tahun_ajaran' => $request->tahun_ajaran,
-                'status_aktif' => $request->status_aktif,
-            ]);
-        });
-
-        return back();
+        return back()->with('success', 'Anggota berhasil ditambahkan.');
     }
 
     /**
-     * Hapus Anggota dari Eskul DAN Hapus Data Peserta
+     * Memperbarui data anggota.
+     * * @param UpdateAnggotaRequest $request Request validasi update
+     * @param int $id ID Anggota Eskul
+     * @return RedirectResponse
      */
-    public function destroy($id)
+    public function update(UpdateAnggotaRequest $request, $id): RedirectResponse
     {
         $anggota = AnggotaEskul::findOrFail($id);
         
-        // Ambil data peserta terkait sebelum menghapus anggota
-        $peserta = $anggota->peserta;
+        // Panggil service untuk menangani logika update
+        $this->anggotaService->updateAnggota($anggota, $request->validated());
 
-        DB::transaction(function () use ($anggota, $peserta) {
-            // Hapus data keanggotaan dulu (karena ada foreign key constraint)
-            $anggota->delete();
+        return back()->with('success', 'Data anggota berhasil diperbarui.');
+    }
 
-            // Hapus data master peserta jika ada
-            if ($peserta) {
-                $peserta->delete();
-            }
-        });
+    /**
+     * Menghapus data anggota.
+     * * @param int $id ID Anggota Eskul
+     * @return RedirectResponse
+     */
+    public function destroy($id): RedirectResponse
+    {
+        $anggota = AnggotaEskul::findOrFail($id);
 
-        return back();
+        // Panggil service untuk menangani logika hapus
+        $this->anggotaService->deleteAnggota($anggota);
+
+        return back()->with('success', 'Anggota berhasil dihapus.');
     }
 }

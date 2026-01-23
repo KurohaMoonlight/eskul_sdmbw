@@ -3,79 +3,72 @@
 namespace App\Http\Controllers;
 
 use App\Models\Jadwal;
-use Illuminate\Http\Request;
+use App\Http\Requests\StoreJadwalRequest;
+use App\Http\Requests\UpdateJadwalRequest;
+use App\Services\JadwalService;
+use Illuminate\Http\RedirectResponse;
 
 class JadwalController extends Controller
 {
-    /**
-     * Menyimpan jadwal baru (Support Multi-Hari / Checklist).
-     */
-    public function store(Request $request)
+    protected $jadwalService;
+
+    // Inject Service melalui Constructor
+    public function __construct(JadwalService $jadwalService)
     {
-        $request->validate([
-            'id_eskul'    => 'required|exists:eskul,id_eskul',
-            'hari'        => 'required|array', // Menerima array karena checklist
-            'hari.*'      => 'in:Senin,Selasa,Rabu,Kamis,Jumat,Sabtu,Minggu',
-            'jam_mulai'   => 'required',
-            'jam_selesai' => 'required',
-            'lokasi'      => 'nullable|string|max:100',
-            'kelas_min'   => 'required|integer',
-            'kelas_max'   => 'required|integer',
-        ]);
-
-        // Loop setiap hari yang dicentang untuk membuat baris data terpisah
-        foreach ($request->hari as $h) {
-            Jadwal::create([
-                'id_eskul'    => $request->id_eskul,
-                'hari'        => $h,
-                'jam_mulai'   => $request->jam_mulai,
-                'jam_selesai' => $request->jam_selesai,
-                'lokasi'      => $request->lokasi,
-                'kelas_min'   => $request->kelas_min,
-                'kelas_max'   => $request->kelas_max,
-            ]);
-        }
-
-        return back();
+        $this->jadwalService = $jadwalService;
     }
 
     /**
-     * Update jadwal (Hanya update 1 baris).
+     * Store a newly created resource in storage.
      */
-    public function update(Request $request, $id)
+    public function store(StoreJadwalRequest $request): RedirectResponse
+    {
+        // Data sudah tervalidasi otomatis oleh StoreJadwalRequest
+        $this->jadwalService->createJadwal($request->validated());
+
+        return back()->with('success', 'Jadwal berhasil ditambahkan.');
+    }
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(UpdateJadwalRequest $request, Jadwal $jadwal): RedirectResponse
+    {
+        // Menggunakan Route Model Binding (Jadwal $jadwal), tidak perlu findOrFail manual
+        // Pastikan route parameter di web.php konsisten (misal: /jadwal/{jadwal}) 
+        // Jika di route pakai {id}, ubah parameter jadi ($id) lalu findOrFail di dalam.
+        // Tapi best practice Laravel modern pakai Model Binding.
+        
+        // Asumsi route: Route::put('/admin/jadwal/{id}', ...) -> maka parameter di sini ($id)
+        // Jika ingin pakai Model Binding, ubah route jadi: Route::put('/admin/jadwal/{jadwal}', ...)
+        
+        // KARENA ROUTE ANDA: Route::put('/admin/jadwal/{id}'...), SAYA GUNAKAN CARA MANUAL:
+        
+        // $jadwal = Jadwal::findOrFail($request->route('id')); // Atau terima $id di parameter
+        
+        $this->jadwalService->updateJadwal($jadwal, $request->validated());
+
+        return back()->with('success', 'Jadwal berhasil diperbarui.');
+    }
+    
+    // Versi method update jika parameter route-nya adalah $id (integer)
+    /*
+    public function update(UpdateJadwalRequest $request, $id): RedirectResponse
     {
         $jadwal = Jadwal::findOrFail($id);
-
-        $request->validate([
-            'hari'        => 'required|array',
-            'jam_mulai'   => 'required',
-            'jam_selesai' => 'required',
-            'lokasi'      => 'nullable|string|max:100',
-            'kelas_min'   => 'required|integer',
-            'kelas_max'   => 'required|integer',
-        ]);
-
-        // Ambil hari pertama dari array checklist (karena update per ID row)
-        $hariDipilih = $request->hari[0] ?? $jadwal->hari;
-
-        $jadwal->update([
-            'hari'        => $hariDipilih,
-            'jam_mulai'   => $request->jam_mulai,
-            'jam_selesai' => $request->jam_selesai,
-            'lokasi'      => $request->lokasi,
-            'kelas_min'   => $request->kelas_min,
-            'kelas_max'   => $request->kelas_max,
-        ]);
-
-        return back();
+        $this->jadwalService->updateJadwal($jadwal, $request->validated());
+        return back()->with('success', 'Jadwal berhasil diperbarui.');
     }
+    */
 
     /**
-     * Hapus jadwal.
+     * Remove the specified resource from storage.
      */
-    public function destroy($id)
+    public function destroy($id): RedirectResponse
     {
-        Jadwal::findOrFail($id)->delete();
-        return back();
+        $jadwal = Jadwal::findOrFail($id);
+        $this->jadwalService->deleteJadwal($jadwal);
+
+        return back()->with('success', 'Jadwal berhasil dihapus.');
     }
 }

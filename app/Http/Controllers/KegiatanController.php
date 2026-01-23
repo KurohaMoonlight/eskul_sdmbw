@@ -3,53 +3,51 @@
 namespace App\Http\Controllers;
 
 use App\Models\Kegiatan;
-use Illuminate\Http\Request;
+use App\Http\Requests\StoreKegiatanRequest;
+use App\Http\Requests\UpdateKegiatanRequest;
+use App\Services\KegiatanService;
+use Illuminate\Http\RedirectResponse;
 
 class KegiatanController extends Controller
 {
+    protected $kegiatanService;
+
+    public function __construct(KegiatanService $kegiatanService)
+    {
+        $this->kegiatanService = $kegiatanService;
+    }
+
     /**
      * Menyimpan data kegiatan baru.
      */
-    public function store(Request $request)
+    public function store(StoreKegiatanRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'id_eskul'           => 'required|exists:eskul,id_eskul',
-            'tanggal'            => 'required|date',
-            'materi_kegiatan'    => 'required|string',
-            'catatan_pembimbing' => 'nullable|string',
-        ]);
+        $this->kegiatanService->createKegiatan($request->validated());
 
-        Kegiatan::create($validated);
-
-        return back();
+        return back()->with('success', 'Kegiatan berhasil ditambahkan.');
     }
 
     /**
      * Memperbarui data kegiatan.
      */
-    public function update(Request $request, $id)
+    public function update(UpdateKegiatanRequest $request, $id): RedirectResponse
     {
         $kegiatan = Kegiatan::findOrFail($id);
+        
+        $this->kegiatanService->updateKegiatan($kegiatan, $request->validated());
 
-        $validated = $request->validate([
-            'tanggal'            => 'required|date',
-            'materi_kegiatan'    => 'required|string',
-            'catatan_pembimbing' => 'nullable|string',
-        ]);
-
-        $kegiatan->update($validated);
-
-        return back();
+        return back()->with('success', 'Kegiatan berhasil diperbarui.');
     }
 
     /**
      * Menghapus data kegiatan.
      */
-    public function destroy($id)
+    public function destroy($id): RedirectResponse
     {
         $kegiatan = Kegiatan::findOrFail($id);
-        $kegiatan->delete();
+        
+        $this->kegiatanService->deleteKegiatan($kegiatan);
 
-        return back();
+        return back()->with('success', 'Kegiatan berhasil dihapus.');
     }
 }

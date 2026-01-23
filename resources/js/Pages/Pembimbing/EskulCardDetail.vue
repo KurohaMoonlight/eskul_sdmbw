@@ -10,6 +10,7 @@ import BoxAbsensi from '@/Components/BoxAbsensi.vue';
 import BoxLogAbsensi from '@/Components/BoxLogAbsensi.vue';
 import BoxPrestasi from '@/Components/BoxPrestasi.vue'; 
 import BoxPenilaian from '@/Components/BoxPenilaian.vue'; // Import Box Penilaian
+import Footer from '../../Components/Footer.vue';
 import { Calendar } from 'v-calendar';
 import 'v-calendar/style.css';
 import Swal from 'sweetalert2';
@@ -431,6 +432,7 @@ const openEditPrestasi = (item) => {
             @close="showModalPrestasi = false" 
         />
     </div>
+    <Footer />
 </template>
 
 <style>

@@ -11,7 +11,6 @@ class Eskul extends Model
 
     protected $table = 'eskul';
     protected $primaryKey = 'id_eskul';
-    public $timestamps = false;
 
     protected $fillable = [
         'nama_eskul',
@@ -21,19 +20,17 @@ class Eskul extends Model
         'jenjang_kelas_max',
     ];
 
-    // Relasi ke Pembimbing
     public function pembimbing()
     {
         return $this->belongsTo(Pembimbing::class, 'id_pembimbing', 'id_pembimbing');
     }
 
-    // Relasi ke Jadwal (One to Many)
     public function jadwal()
     {
         return $this->hasMany(Jadwal::class, 'id_eskul', 'id_eskul');
     }
 
-    // Relasi ke Anggota Eskul (One to Many)
+    // Relasi ke AnggotaEskul
     public function anggota_eskul()
     {
         return $this->hasMany(AnggotaEskul::class, 'id_eskul', 'id_eskul');

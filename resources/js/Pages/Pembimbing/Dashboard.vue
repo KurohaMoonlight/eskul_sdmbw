@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { Head, usePage } from '@inertiajs/vue3';
 import Navbar from '@/Components/Navbar.vue';
 import CardShowEskul from '@/Components/CardShowEskul.vue'; // Pastikan import sesuai nama file komponen
+import Footer from '../../Components/Footer.vue';
 
 const page = usePage();
 const user = computed(() => page.props.auth?.user);
@@ -72,4 +73,5 @@ const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'n
             </div>
         </main>
     </div>
+    <Footer />
 </template>

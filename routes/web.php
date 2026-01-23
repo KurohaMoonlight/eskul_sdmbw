@@ -38,7 +38,18 @@ Route::middleware(['auth:admin'])->group(function () {
     // Dashboard Admin
     Route::get('/admin/dashboard', function () {
         return Inertia::render('Admin/Dashboard', [
-            'pembimbings' => Pembimbing::orderBy('nama_lengkap', 'asc')->get(),
+            // Gunakan map untuk memformat last_login
+            'pembimbings' => Pembimbing::orderBy('nama_lengkap', 'asc')->get()->map(function ($pembimbing) {
+                return [
+                    'id_pembimbing' => $pembimbing->id_pembimbing,
+                    'nama_lengkap' => $pembimbing->nama_lengkap,
+                    'username' => $pembimbing->username,
+                    // Format tanggal: "23 Jan 2026 14:30" atau gunakan diffForHumans()
+                    'last_login' => $pembimbing->last_login 
+                        ? $pembimbing->last_login->format('d M Y H:i') // Contoh: 23 Jan 2026 14:30
+                        : null,
+                ];
+            }),
             'eskuls' => Eskul::with('pembimbing')->get(),
         ]);
     })->name('admin.dashboard');

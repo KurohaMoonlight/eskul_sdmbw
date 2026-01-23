@@ -33,11 +33,21 @@ class AuthController extends Controller
 
         // 4. Cek Login sebagai PEMBIMBING
         // Parameter kedua ($remember) dimasukkan ke fungsi attempt
+
         if (Auth::guard('pembimbing')->attempt($credentials, $remember)) {
             $request->session()->regenerate();
+
+            // --- MULAI TAMBAHAN ---
+            // Ambil user yang sedang login
+            $user = Auth::guard('pembimbing')->user();
+            // Update kolom last_login dengan waktu sekarang
+            $user->update([
+                'last_login' => now(),
+            ]);
+            // --- AKHIR TAMBAHAN ---
+
             return redirect()->intended(route('pembimbing.dashboard'));
         }
-
         // 5. Jika Login Gagal
         throw ValidationException::withMessages([
             'username' => 'Username atau password salah.',

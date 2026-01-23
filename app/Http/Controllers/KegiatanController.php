@@ -50,4 +50,4 @@ class KegiatanController extends Controller
 
         return back()->with('success', 'Kegiatan berhasil dihapus.');
     }
-}2
+}

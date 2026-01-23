@@ -4,7 +4,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import Navbar from '@/Components/Navbar.vue';
 import TabJadwal from '@/Components/TabJadwal.vue';
 import TabAnggota from '@/Components/TabAnggota.vue';
-import ModalFormEskul from '@/Components/ModalFormEskul.vue'; // IMPORT INI WAJIB ADA
+import ModalFormEskul from '@/Components/ModalFormEskul.vue';
 import Footer from '../../../Components/Footer.vue';
 
 const props = defineProps({
@@ -15,10 +15,15 @@ const props = defineProps({
     pembimbings: {
         type: Array,
         default: () => []
+    },
+    // Tangkap data peserta dari Controller
+    allPeserta: {
+        type: Array,
+        default: () => []
     }
 });
 
-const activeTab = ref('jadwal');
+const activeTab = ref('anggota'); // Default tab (bisa diubah sesuai selera)
 const showEditModal = ref(false);
 
 const openEditInfo = () => {
@@ -39,13 +44,11 @@ const openEditInfo = () => {
             </Link>
         </Navbar>
 
-        <!-- Gunakan v-if untuk memastikan data eskul ada sebelum render -->
         <main class="py-10" v-if="props.eskul">
             <div class="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
                 
                 <!-- HEADER INFO ESKUL -->
                 <div class="mb-8 rounded-2xl bg-[#213448] p-6 text-[#EAE0CF] shadow-lg md:p-10 relative overflow-hidden">
-                    <!-- Glow effect dengan pointer-events-none agar tidak menghalangi klik button -->
                     <div class="absolute -right-10 -top-10 h-64 w-64 rounded-full bg-[#547792] opacity-20 blur-3xl z-0 pointer-events-none"></div>
                     
                     <div class="relative z-10 flex flex-col justify-between gap-4 md:flex-row md:items-end">
@@ -69,13 +72,8 @@ const openEditInfo = () => {
                             </div>
                         </div>
                         
-                        <!-- Actions Header (Z-index tinggi agar klik terdeteksi) -->
                         <div class="relative z-20 shrink-0">
-                             <button 
-                                type="button"
-                                @click="openEditInfo"
-                                class="cursor-pointer rounded-lg bg-[#EAE0CF]/20 px-4 py-2 text-sm font-bold transition hover:bg-[#EAE0CF] hover:text-[#213448] active:scale-95 shadow-sm"
-                             >
+                             <button type="button" @click="openEditInfo" class="cursor-pointer rounded-lg bg-[#EAE0CF]/20 px-4 py-2 text-sm font-bold transition hover:bg-[#EAE0CF] hover:text-[#213448] active:scale-95 shadow-sm">
                                 Edit Info
                             </button>
                         </div>
@@ -85,26 +83,11 @@ const openEditInfo = () => {
                 <!-- TABS NAVIGATION -->
                 <div class="mb-6 border-b border-[#94B4C1]/50">
                     <nav class="-mb-px flex gap-6">
-                        <button 
-                            @click="activeTab = 'jadwal'"
-                            :class="activeTab === 'jadwal' ? 'border-[#213448] text-[#213448]' : 'border-transparent text-[#547792] hover:text-[#213448]'"
-                            class="border-b-4 px-1 py-4 text-sm font-bold transition-colors"
-                        >
+                        <button @click="activeTab = 'jadwal'" :class="activeTab === 'jadwal' ? 'border-[#213448] text-[#213448]' : 'border-transparent text-[#547792] hover:text-[#213448]'" class="border-b-4 px-1 py-4 text-sm font-bold transition-colors">
                             Jadwal Latihan
                         </button>
-                        <button 
-                            @click="activeTab = 'anggota'"
-                            :class="activeTab === 'anggota' ? 'border-[#213448] text-[#213448]' : 'border-transparent text-[#547792] hover:text-[#213448]'"
-                            class="border-b-4 px-1 py-4 text-sm font-bold transition-colors"
-                        >
+                        <button @click="activeTab = 'anggota'" :class="activeTab === 'anggota' ? 'border-[#213448] text-[#213448]' : 'border-transparent text-[#547792] hover:text-[#213448]'" class="border-b-4 px-1 py-4 text-sm font-bold transition-colors">
                             Anggota
-                        </button>
-                        <button 
-                            @click="activeTab = 'kegiatan'"
-                            :class="activeTab === 'kegiatan' ? 'border-[#213448] text-[#213448]' : 'border-transparent text-[#547792] hover:text-[#213448]'"
-                            class="border-b-4 px-1 py-4 text-sm font-bold transition-colors"
-                        >
-                            Kegiatan
                         </button>
                     </nav>
                 </div>
@@ -112,7 +95,15 @@ const openEditInfo = () => {
                 <!-- TAB CONTENT -->
                 <div class="min-h-[400px]">
                     <TabJadwal v-if="activeTab === 'jadwal'" :jadwal="props.eskul.jadwal" :idEskul="props.eskul.id_eskul" />
-                    <TabAnggota v-if="activeTab === 'anggota'" :anggota="props.eskul.anggota_eskul" :idEskul="props.eskul.id_eskul" />
+                    
+                    <!-- PASSING PROPS allPeserta KE SINI -->
+                    <TabAnggota 
+                        v-if="activeTab === 'anggota'" 
+                        :anggota="props.eskul.anggota_eskul" 
+                        :idEskul="props.eskul.id_eskul"
+                        :allPeserta="props.allPeserta" 
+                    />
+
                     <div v-if="activeTab === 'kegiatan'" class="rounded-xl border border-[#94B4C1] bg-white p-8 text-center">
                         <p class="text-[#547792] italic">Modul Kegiatan belum tersedia.</p>
                     </div>
@@ -120,7 +111,6 @@ const openEditInfo = () => {
             </div>
         </main>
 
-        <!-- Modal Edit Info Eskul -->
         <ModalFormEskul 
             v-if="showEditModal"
             :show="showEditModal"
@@ -129,6 +119,5 @@ const openEditInfo = () => {
             @close="showEditModal = false"
         />
     </div>
-    <!-- Footer -->
      <Footer/>
 </template>

@@ -3,48 +3,46 @@
 namespace App\Services;
 
 use App\Models\Jadwal;
-use Illuminate\Support\Facades\DB;
 
 class JadwalService
 {
     /**
-     * Menyimpan jadwal, mendukung multi-hari sekaligus.
+     * Membuat jadwal baru. 
+     * Menerima array hari dari form checklist.
      */
     public function createJadwal(array $data)
     {
-        return DB::transaction(function () use ($data) {
-            $created = [];
+        // Jika user memilih banyak hari (misal Senin & Kamis)
+        // Kita loop dan buat jadwal untuk masing-masing hari
+        if (isset($data['hari']) && is_array($data['hari'])) {
             foreach ($data['hari'] as $hari) {
-                $created[] = Jadwal::create([
-                    'id_eskul'    => $data['id_eskul'],
-                    'hari'        => $hari,
-                    'jam_mulai'   => $data['jam_mulai'],
-                    'jam_selesai' => $data['jam_selesai'],
-                    'lokasi'      => $data['lokasi'] ?? null,
-                    'kelas_min'   => $data['kelas_min'],
-                    'kelas_max'   => $data['kelas_max'],
-                ]);
+                // Copy data master dan ganti harinya
+                $jadwalItem = $data;
+                $jadwalItem['hari'] = $hari;
+                
+                Jadwal::create($jadwalItem);
             }
-            return $created;
-        });
+        } else {
+            // Fallback jika dikirim single string (legacy support)
+            Jadwal::create($data);
+        }
     }
 
     /**
-     * Update satu jadwal.
+     * Update jadwal.
      */
     public function updateJadwal(Jadwal $jadwal, array $data)
     {
-        // Ambil hari pertama dari array checklist karena update per ID row
-        $hariDipilih = $data['hari'][0] ?? $jadwal->hari;
+        // Saat edit, user mengedit 1 ID spesifik.
+        // Jika checklist hari dikirim sebagai array, kita ambil elemen pertama saja
+        // Karena kita tidak bisa mengubah 1 baris ID menjadi banyak baris (ambigu).
+        if (isset($data['hari']) && is_array($data['hari'])) {
+            $data['hari'] = $data['hari'][0] ?? $jadwal->hari;
+        }
 
-        return $jadwal->update([
-            'hari'        => $hariDipilih,
-            'jam_mulai'   => $data['jam_mulai'],
-            'jam_selesai' => $data['jam_selesai'],
-            'lokasi'      => $data['lokasi'] ?? null,
-            'kelas_min'   => $data['kelas_min'],
-            'kelas_max'   => $data['kelas_max'],
-        ]);
+        $jadwal->update($data);
+        
+        return $jadwal;
     }
 
     /**

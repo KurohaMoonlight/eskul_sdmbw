@@ -4,24 +4,31 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class StoreJadwalRequest extends FormRequest
+class UpdateJadwalRequest extends FormRequest
 {
+    /**
+     * Determine if the user is authorized to make this request.
+     */
     public function authorize(): bool
     {
-        return true; // Ubah jadi true agar bisa dipakai
+        return true;
     }
 
+    /**
+     * Get the validation rules that apply to the request.
+     */
     public function rules(): array
     {
         return [
-            'id_eskul'    => 'required|exists:eskul,id_eskul',
-            'hari'        => 'required|array',
-            'hari.*'      => 'in:Senin,Selasa,Rabu,Kamis,Jumat,Sabtu,Minggu',
-            'jam_mulai'   => 'required',
-            'jam_selesai' => 'required',
-            'lokasi'      => 'nullable|string|max:100',
-            'kelas_min'   => 'required|integer|min:1|max:6',
-            'kelas_max'   => 'required|integer|min:1|max:6|gte:kelas_min', // Validasi tambahan: max >= min
+            'id_eskul' => ['required', 'exists:eskul,id_eskul'],
+            // Validasi hari sebagai array karena dikirim dari checklist
+            'hari' => ['required', 'array'], 
+            'hari.*' => ['string'], // Pastikan isi arraynya string
+            'jam_mulai' => ['required', 'date_format:H:i'],
+            'jam_selesai' => ['required', 'date_format:H:i', 'after:jam_mulai'],
+            'lokasi' => ['required', 'string', 'max:100'],
+            'kelas_min' => ['required', 'integer', 'min:1', 'max:6'],
+            'kelas_max' => ['required', 'integer', 'min:1', 'max:6', 'gte:kelas_min'],
         ];
     }
 }

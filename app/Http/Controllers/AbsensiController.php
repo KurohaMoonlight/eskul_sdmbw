@@ -1,31 +1,38 @@
 <?php
 
-namespace App\Services;
+namespace App\Http\Controllers;
 
 use App\Models\Absensi;
+use App\Models\Eskul;
 use App\Models\Jadwal;
 use App\Models\Kegiatan;
-use App\Models\Eskul;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Exports\AbsensiExport; // Import Export Class
+use Maatwebsite\Excel\Facades\Excel; // Import Facade Excel
 
-class AbsensiService
+class AbsensiController extends Controller
 {
     /**
-     * Menyimpan data absensi.
-     * Mencari atau membuat kegiatan, lalu menyimpan absensi peserta.
-     *
-     * @param string $tanggal
-     * @param int $idJadwal
-     * @param array $dataAbsensi
-     * @return void
+     * Menyimpan data absensi dari BoxAbsensi.vue
      */
-    public function storeAbsensi(string $tanggal, int $idJadwal, array $dataAbsensi)
+    public function store(Request $request)
     {
+        // ... (Kode store yang sudah ada sebelumnya biarkan tetap sama) ...
+        // Validasi Input
+        $request->validate([
+            'tanggal'      => 'required|date',
+            'id_jadwal'    => 'required|exists:jadwal,id_jadwal',
+            'data_absensi' => 'required|array', 
+        ]);
+
+        $tanggal = $request->tanggal;
+        $idJadwal = $request->id_jadwal;
+        $dataAbsensi = $request->data_absensi;
+
         DB::transaction(function () use ($tanggal, $idJadwal, $dataAbsensi) {
-            // Ambil jadwal untuk referensi id_eskul
             $jadwal = Jadwal::findOrFail($idJadwal);
 
-            // Cari atau buat kegiatan untuk tanggal & eskul ini
             $kegiatan = Kegiatan::firstOrCreate(
                 [
                     'id_eskul' => $jadwal->id_eskul,
@@ -37,7 +44,6 @@ class AbsensiService
                 ]
             );
 
-            // Simpan absensi per peserta
             foreach ($dataAbsensi as $idPeserta => $status) {
                 Absensi::updateOrCreate(
                     [
@@ -50,64 +56,26 @@ class AbsensiService
                 );
             }
         });
+
+        return back()->with('success', 'Absensi berhasil disimpan.');
     }
 
     /**
-     * Mendapatkan data log absensi untuk keperluan export.
-     *
-     * @param int $idEskul
-     * @param array $filters
-     * @return array Mengembalikan array berisi 'eskul', 'logs', dan 'summary'
+     * Menampilkan Halaman Cetak Log Absensi
      */
-    public function getExportData(int $idEskul, array $filters)
+   public function exportExcel(Request $request)
     {
-        // Ambil data Eskul
-        $eskul = Eskul::with('pembimbing')->find($idEskul);
+        $request->validate([
+            'id_eskul' => 'required|exists:eskul,id_eskul',
+        ]);
 
-        // Query dasar Log Absensi
-        $queryLog = Absensi::with(['peserta', 'kegiatan'])
-            ->whereHas('kegiatan', function($q) use ($idEskul) {
-                $q->where('id_eskul', $idEskul);
-            });
+        $eskul = Eskul::find($request->id_eskul);
+        $filters = $request->only(['search', 'status', 'start_date', 'end_date']);
+        
+        // Nama file yang rapi
+        $fileName = 'Laporan_Absensi_' . str_replace(' ', '_', $eskul->nama_eskul) . '_' . date('d-m-Y') . '.xlsx';
 
-        // Filter berdasarkan Nama Peserta
-        if (!empty($filters['search'])) {
-            $queryLog->whereHas('peserta', function($q) use ($filters) {
-                $q->where('nama_lengkap', 'like', '%' . $filters['search'] . '%');
-            });
-        }
-
-        // Filter berdasarkan Status
-        if (!empty($filters['status'])) {
-            $queryLog->where('status', $filters['status']);
-        }
-
-        // Filter berdasarkan Rentang Tanggal
-        if (!empty($filters['start_date']) && !empty($filters['end_date'])) {
-            $queryLog->whereHas('kegiatan', function($q) use ($filters) {
-                $q->whereBetween('tanggal', [$filters['start_date'], $filters['end_date']]);
-            });
-        }
-
-        // Ambil data log yang sudah diurutkan
-        $logs = $queryLog->join('kegiatan', 'absensi.id_kegiatan', '=', 'kegiatan.id_kegiatan')
-            ->orderBy('kegiatan.tanggal', 'desc')
-            ->select('absensi.*')
-            ->get();
-
-        // Hitung Ringkasan Data
-        $summary = [
-            'total_pertemuan' => $logs->pluck('id_kegiatan')->unique()->count(),
-            'hadir' => $logs->where('status', 'Hadir')->count(),
-            'sakit' => $logs->where('status', 'Sakit')->count(),
-            'izin'  => $logs->where('status', 'Izin')->count(),
-            'alpha' => $logs->where('status', 'Alpha')->count(),
-        ];
-
-        return [
-            'eskul' => $eskul,
-            'logs' => $logs,
-            'summary' => $summary,
-        ];
+        // Panggil class export dan download using fully qualified name to avoid namespace issues
+        return \Maatwebsite\Excel\Facades\Excel::download(new AbsensiExport($request->id_eskul, $filters, $eskul->nama_eskul), $fileName);
     }
 }

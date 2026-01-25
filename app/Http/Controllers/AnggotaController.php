@@ -2,51 +2,97 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\StoreAnggotaRequest;
-use App\Http\Requests\UpdateAnggotaRequest;
-use App\Services\AnggotaService;
+use App\Models\Peserta;
 use App\Models\AnggotaEskul;
-use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AnggotaController extends Controller
 {
-    protected $anggotaService;
-
-    public function __construct(AnggotaService $anggotaService)
+    /**
+     * Menyimpan Peserta Baru sekaligus mendaftarkan ke Eskul
+     */
+    public function store(Request $request)
     {
-        $this->anggotaService = $anggotaService;
+        $request->validate([
+            'nama_lengkap'  => 'required|string|max:100',
+            'tingkat_kelas' => 'required|string|max:20',
+            'jenis_kelamin' => 'required|in:L,P',
+            'id_eskul'      => 'required|exists:eskul,id_eskul',
+            'tahun_ajaran'  => 'required|string|max:10',
+        ]);
+
+        DB::transaction(function () use ($request) {
+            $peserta = Peserta::create([
+                'nama_lengkap'  => $request->nama_lengkap,
+                'tingkat_kelas' => $request->tingkat_kelas,
+                'jenis_kelamin' => $request->jenis_kelamin,
+            ]);
+
+            AnggotaEskul::create([
+                'id_eskul'     => $request->id_eskul,
+                'id_peserta'   => $peserta->id_peserta,
+                'tahun_ajaran' => $request->tahun_ajaran,
+                'status_aktif' => true,
+            ]);
+        });
+
+        return back();
     }
 
     /**
-     * Simpan anggota baru.
+     * Update Data Anggota & Peserta
      */
-    public function store(StoreAnggotaRequest $request): RedirectResponse
-    {
-        $this->anggotaService->createAnggota($request->validated());
-
-        // Redirect back() akan otomatis me-refresh halaman Detail Eskul
-        return back()->with('success', 'Anggota berhasil ditambahkan.');
-    }
-
-    /**
-     * Update data anggota.
-     */
-    public function update(UpdateAnggotaRequest $request, $id): RedirectResponse
+    public function update(Request $request, $id)
     {
         $anggota = AnggotaEskul::findOrFail($id);
-        $this->anggotaService->updateAnggota($anggota, $request->validated());
+        
+        $request->validate([
+            'nama_lengkap'  => 'required|string|max:100',
+            'tingkat_kelas' => 'required|string|max:20',
+            'jenis_kelamin' => 'required|in:L,P',
+            'tahun_ajaran'  => 'required|string|max:10',
+            'status_aktif'  => 'required|boolean',
+        ]);
 
-        return back()->with('success', 'Data anggota diperbarui.');
+        DB::transaction(function () use ($request, $anggota) {
+            // 1. Update Data Peserta (Master Siswa)
+            $anggota->peserta->update([
+                'nama_lengkap'  => $request->nama_lengkap,
+                'tingkat_kelas' => $request->tingkat_kelas,
+                'jenis_kelamin' => $request->jenis_kelamin,
+            ]);
+
+            // 2. Update Data Keanggotaan
+            $anggota->update([
+                'tahun_ajaran' => $request->tahun_ajaran,
+                'status_aktif' => $request->status_aktif,
+            ]);
+        });
+
+        return back();
     }
 
     /**
-     * Hapus anggota (keluarkan siswa dari eskul).
+     * Hapus Anggota dari Eskul DAN Hapus Data Peserta
      */
-    public function destroy($id): RedirectResponse
+    public function destroy($id)
     {
         $anggota = AnggotaEskul::findOrFail($id);
-        $this->anggotaService->deleteAnggota($anggota);
+        
+        // Ambil data peserta terkait sebelum menghapus anggota
+        $peserta = $anggota->peserta;
 
-        return back()->with('success', 'Anggota berhasil dikeluarkan.');
+        DB::transaction(function () use ($anggota, $peserta) {
+            // Hapus data keanggotaan dulu (karena ada foreign key constraint)
+            $anggota->delete();
+
+            // Hapus data master peserta jika ada
+            if ($peserta) {
+                $peserta->delete();
+            }
+        });
+
+        return back();
     }
 }

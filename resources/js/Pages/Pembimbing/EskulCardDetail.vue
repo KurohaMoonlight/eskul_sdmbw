@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed,  } from 'vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import Navbar from '@/Components/Navbar.vue';
 import ModalFormJadwal from '@/Components/ModalFormJadwal.vue';
@@ -51,10 +51,32 @@ const props = defineProps({
         type: Array,
         default: () => []
     },
-    currentSemesterInfo: {
-        type: Object,
-        default: () => ({ semester: 'Ganjil', tahun: '2025/2026' })
+    currentSemesterInfo: Object
+});
+
+const calculatedSemesterInfo = computed(() => {
+    // Jika backend mengirim props, gunakan itu. Jika tidak, hitung otomatis.
+    if (props.currentSemesterInfo) return props.currentSemesterInfo;
+
+    const now = new Date();
+    const month = now.getMonth(); // 0 (Jan) - 11 (Des)
+    const year = now.getFullYear();
+
+    let semester = '';
+    let tahun = '';
+
+    if (month >= 6) { 
+        // Juli s/d Desember (Semester 1 / Ganjil)
+        semester = 'Ganjil';
+        tahun = `${year}/${year + 1}`;
+    } else { 
+        // Januari s/d Juni (Semester 2 / Genap)
+        // Contoh: Jan 2026 masuk tahun ajaran 2025/2026
+        semester = 'Genap';
+        tahun = `${year - 1}/${year}`;
     }
+
+    return { semester, tahun };
 });
 
 const formatTime = (time) => {
@@ -411,7 +433,7 @@ const openEditPrestasi = (item) => {
                             :nilai="props.nilai"
                             :anggota="props.anggota"
                             :idEskul="props.eskul?.id_eskul"
-                            :currentSemesterInfo="props.currentSemesterInfo"
+                            :currentSemesterInfo="calculatedSemesterInfo"
                         />
                     </div>
 
@@ -420,7 +442,16 @@ const openEditPrestasi = (item) => {
         </main>
 
         <ModalFormJadwal :show="showModalJadwal" :jadwalData="null" :idEskul="props.eskul?.id_eskul" @close="showModalJadwal = false" />
-        <ModalFormAddAnggota :show="showModalAnggota" :idEskul="props.eskul?.id_eskul" :anggotaData="selectedAnggota" @close="showModalAnggota = false" />
+        <ModalFormAddAnggota 
+        :show="showModalAnggota" 
+        :idEskul="props.eskul?.id_eskul" 
+        :anggotaData="selectedAnggota"
+        
+        :minKelas="props.eskul?.jenjang_kelas_min"
+        :maxKelas="props.eskul?.jenjang_kelas_max"
+        
+        @close="showModalAnggota = false" 
+         />
         <ModalFormKegiatan :show="showModalKegiatan" :idEskul="props.eskul?.id_eskul" :selectedDate="selectedDate" :kegiatanData="selectedKegiatan" @close="showModalKegiatan = false" />
         
         <!-- Modal Prestasi Baru -->

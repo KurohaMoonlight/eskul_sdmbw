@@ -4,15 +4,12 @@ import { router } from '@inertiajs/vue3';
 import ModalFormAddAnggota from '@/Components/ModalFormAddAnggota.vue';
 
 const props = defineProps({
-    anggota: {
-        type: Array,
-        default: () => [],
-    },
+    anggota: Array,
     idEskul: [Number, String],
-    allPeserta: { // Data master siswa untuk dropdown
-        type: Array,
-        default: () => [],
-    }
+    allPeserta: Array,
+    // Tambahkan ini
+    minKelas: [Number, String], 
+    maxKelas: [Number, String]
 });
 
 // State
@@ -162,6 +159,8 @@ const deleteAnggota = (id) => {
             :anggotaData="selectedAnggota"
             :idEskul="idEskul"
             :allPeserta="allPeserta"
+            :minKelas="props.minKelas" 
+            :maxKelas="props.maxKelas"
             @close="showModal = false"
         />
     </div>

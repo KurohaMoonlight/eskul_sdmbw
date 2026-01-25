@@ -102,6 +102,8 @@ const openEditInfo = () => {
                         :anggota="props.eskul.anggota_eskul" 
                         :idEskul="props.eskul.id_eskul"
                         :allPeserta="props.allPeserta" 
+                        :minKelas="props.eskul.jenjang_kelas_min"  
+                        :maxKelas="props.eskul.jenjang_kelas_max"
                     />
 
                     <div v-if="activeTab === 'kegiatan'" class="rounded-xl border border-[#94B4C1] bg-white p-8 text-center">

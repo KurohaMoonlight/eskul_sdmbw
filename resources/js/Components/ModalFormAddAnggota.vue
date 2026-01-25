@@ -1,11 +1,20 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3';
-import { watch } from 'vue';
+import { watch,computed } from 'vue';
 
 const props = defineProps({
     show: Boolean,
     idEskul: [Number, String],
-    anggotaData: Object, // Data untuk Edit (null jika tambah baru)
+    anggotaData: Object,
+    // Tambahkan props baru untuk batasan
+    minKelas: {
+        type: [Number, String],
+        default: 1
+    },
+    maxKelas: {
+        type: [Number, String],
+        default: 6
+    }
 });
 
 const emit = defineEmits(['close']);
@@ -20,6 +29,28 @@ const form = useForm({
     id_eskul: '',
     tahun_ajaran: new Date().getFullYear() + '/' + (new Date().getFullYear() + 1),
     status_aktif: true, // Tambahan untuk edit status
+});
+
+const getCurrentTahunAjaran = () => {
+    const now = new Date();
+    const month = now.getMonth(); // 0 (Jan) - 11 (Des)
+    const year = now.getFullYear();
+    
+    // Jika bulan 6 (Juli) atau lebih, berarti tahun ajaran baru dimulai tahun ini
+    // Jika sebelum Juli, berarti masih tahun ajaran yang mulai tahun lalu
+    const startYear = month >= 6 ? year : year - 1; 
+    
+    return `${startYear}/${startYear + 1}`;
+};
+
+const kelasOptions = computed(() => {
+    const min = parseInt(props.minKelas) || 1;
+    const max = parseInt(props.maxKelas) || 6;
+    const options = [];
+    for (let i = min; i <= max; i++) {
+        options.push(String(i));
+    }
+    return options;
 });
 
 watch(() => props.show, (isOpen) => {
@@ -41,10 +72,11 @@ watch(() => props.show, (isOpen) => {
             // MODE TAMBAH
             form.reset();
             form.id_eskul = props.idEskul;
-            form.tingkat_kelas = '1';
+            // Set default kelas ke nilai minimal yang diizinkan
+            form.tingkat_kelas = String(props.minKelas); 
             form.jenis_kelamin = 'L';
             form.status_aktif = true;
-            form.tahun_ajaran = new Date().getFullYear() + '/' + (new Date().getFullYear() + 1);
+            form.tahun_ajaran = getCurrentTahunAjaran();
         }
     }
 });
@@ -103,7 +135,7 @@ const submit = () => {
                             <div class="space-y-2">
                                 <label class="block text-sm font-bold text-[#213448]">Kelas</label>
                                 <select v-model="form.tingkat_kelas" class="w-full rounded-lg border border-[#94B4C1] bg-white p-3 text-[#213448] focus:border-[#213448] focus:ring-2 focus:ring-[#547792]/20">
-                                    <option v-for="i in 6" :key="i" :value="String(i)">Kelas {{ i }}</option>
+                                    <option v-for="k in kelasOptions" :key="k" :value="k">Kelas {{ k }}</option>
                                 </select>
                             </div>
 

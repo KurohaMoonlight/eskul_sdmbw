@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import Swal from 'sweetalert2';
 
@@ -19,6 +19,11 @@ const props = defineProps({
     },
     errors: Object 
 });
+
+watch(() => props.currentSemesterInfo, (newVal) => {
+    generateForm.semester = newVal.semester;
+    generateForm.tahun_ajaran = newVal.tahun;
+}, { deep: true });
 
 // State Editing
 const isEditing = ref(false);
@@ -124,7 +129,12 @@ const getPredikat = (n1, n2, n3) => {
             </h3>
             
             <div class="flex items-center gap-2">
-                <span class="text-[#94B4C1] text-xs font-mono bg-[#94B4C1]/10 px-2 py-1 rounded">
+                <span 
+                    class="text-xs font-mono px-2 py-1 rounded border"
+                    :class="currentSemesterInfo.semester === 'Ganjil' 
+                        ? 'bg-orange-50 text-orange-600 border-orange-100' 
+                        : 'bg-indigo-50 text-indigo-600 border-indigo-100'"
+                >
                     {{ currentSemesterInfo.semester }} {{ currentSemesterInfo.tahun }}
                 </span>
                 

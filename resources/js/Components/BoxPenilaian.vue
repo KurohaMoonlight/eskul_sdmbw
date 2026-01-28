@@ -1,334 +1,461 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
+import { router, usePage } from '@inertiajs/vue3';
 import { useForm } from '@inertiajs/vue3';
-import Swal from 'sweetalert2';
+import Swal from 'sweetalert2'; // Import SweetAlert2
 
 const props = defineProps({
     nilai: {
         type: Array,
         default: () => []
     },
-    anggota: {
-        type: Array,
-        default: () => []
+    idEskul: {
+        type: [Number, String],
+        required: true
     },
-    idEskul: [Number, String],
+    // Semester REAL-TIME hari ini (default sistem)
     currentSemesterInfo: {
         type: Object,
         default: () => ({ semester: 'Ganjil', tahun: '2025/2026' })
     },
-    errors: Object 
+    // Filter yang SEDANG DIPILIH (dari Controller)
+    activeNilaiFilter: {
+        type: Object,
+        default: () => null 
+    }
 });
 
-const selectedTahun = ref(props.currentSemesterInfo.tahun);
-const selectedSemester = ref(props.currentSemesterInfo.semester);
-const tahunOptions = ['2023/2024', '2024/2025', '2025/2026', '2026/2027'];
+// Gunakan filter aktif dari server jika ada, jika tidak gunakan default hari ini
+const activeFilter = computed(() => props.activeNilaiFilter || props.currentSemesterInfo);
 
+// State Lokal Filter (Dropdown)
+const selectedSemester = ref(activeFilter.value.semester);
+const selectedTahun = ref(activeFilter.value.tahun || activeFilter.value.tahun_ajaran);
+
+// State Mode Edit
 const isEditing = ref(false);
-const hasData = computed(() => props.nilai && props.nilai.length > 0);
+const processing = ref(false);
 
-const generateForm = useForm({
-    id_eskul: props.idEskul,
-    semester: selectedSemester.value,
-    tahun_ajaran: selectedTahun.value
+// Generate opsi Tahun Ajaran (Current +/- 2 tahun)
+const yearOptions = computed(() => {
+    // Ambil tahun dari currentSemesterInfo sebagai pivot agar dinamis
+    const currentYearStr = props.currentSemesterInfo.tahun; // Misal "2025/2026"
+    const startYear = parseInt(currentYearStr.split('/')[0]); // 2025
+    
+    let years = [];
+    // Tampilkan 2 tahun ke belakang dan 1 tahun ke depan
+    for (let i = -2; i <= 1; i++) {
+        const y = startYear + i;
+        years.push(`${y}/${y + 1}`);
+    }
+    return years;
 });
 
-const updateForm = useForm({ nilai_data: [] });
+// Watcher: Reload halaman saat filter berubah
+watch([selectedSemester, selectedTahun], ([newSem, newTahun]) => {
+    // PERBAIKAN: Gunakan URL API native JS untuk update params tanpa dependency 'route'
+    const url = new URL(window.location.href);
+    url.searchParams.set('semester', newSem);
+    url.searchParams.set('tahun_ajaran', newTahun);
 
-// Form untuk Sync
-const syncForm = useForm({
-    id_eskul: props.idEskul,
-    semester: selectedSemester.value,
-    tahun_ajaran: selectedTahun.value
-});
-
-const handleFilterChange = () => {
-    console.log(`Mengganti tampilan ke: ${selectedTahun.value} - ${selectedSemester.value}`);
-    isEditing.value = false;
-    // Update form state agar sync/generate pakai nilai filter terbaru
-    generateForm.semester = selectedSemester.value;
-    generateForm.tahun_ajaran = selectedTahun.value;
-    syncForm.semester = selectedSemester.value;
-    syncForm.tahun_ajaran = selectedTahun.value;
-};
-
-// Logic Sync / Auto Hitung
-const generateFromDaily = () => {
-    Swal.fire({
-        title: 'Hitung Otomatis?',
-        text: "Nilai rapor akan dihitung ulang berdasarkan rata-rata nilai harian semester ini. Data manual akan tertimpa.",
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Ya, Hitung',
-        cancelButtonText: 'Batal',
-        confirmButtonColor: '#213448'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            // Update parameter sebelum kirim
-            syncForm.id_eskul = props.idEskul;
-            syncForm.semester = selectedSemester.value;
-            syncForm.tahun_ajaran = selectedTahun.value;
-
-            syncForm.post('/admin/nilai/sync-daily', {
-                preserveScroll: true,
-                onSuccess: () => {
-                    Swal.fire('Berhasil', 'Nilai berhasil disinkronisasi dari data harian.', 'success');
-                    isEditing.value = false; // Keluar mode edit agar data refresh
-                },
-                onError: () => Swal.fire('Gagal', 'Terjadi kesalahan saat sinkronisasi.', 'error')
-            });
+    router.get(
+        url.toString(),
+        {},
+        { 
+            preserveState: true, 
+            preserveScroll: true, 
+            only: ['nilai', 'activeNilaiFilter'] // Partial reload agar ringan
         }
-    });
-};
+    );
+});
 
-const initializePenilaian = () => {
-    generateForm.id_eskul = props.idEskul;
-    generateForm.semester = selectedSemester.value; 
-    generateForm.tahun_ajaran = selectedTahun.value;
+// Form Generate (Buka Periode)
+const formGenerate = useForm({
+    id_eskul: props.idEskul,
+    semester: '', 
+    tahun_ajaran: '', 
+});
+
+const generateNilai = () => {
+    // Pastikan mengirim data sesuai filter yang sedang dilihat
+    formGenerate.semester = selectedSemester.value;
+    formGenerate.tahun_ajaran = selectedTahun.value;
 
     Swal.fire({
-        title: 'Buka Penilaian?',
-        text: `Mulai penilaian untuk ${selectedSemester.value} ${selectedTahun.value}?`,
+        title: 'Buka Periode Penilaian?',
+        text: `Anda akan membuka penilaian untuk Semester ${selectedSemester.value} ${selectedTahun.value}.`,
         icon: 'question',
         showCancelButton: true,
-        confirmButtonText: 'Ya, Buka'
+        confirmButtonColor: '#213448', // Warna tema aplikasi
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Ya, Buka!',
+        cancelButtonText: 'Batal',
+        reverseButtons: true
     }).then((result) => {
         if (result.isConfirmed) {
-            generateForm.post('/admin/nilai/generate', {
+            formGenerate.post('/admin/nilai/generate', {
                 preserveScroll: true,
-                onSuccess: () => Swal.fire('Berhasil', 'Periode penilaian dibuka.', 'success'),
-                onError: (errors) => {
-                    let msg = errors.message || 'Gagal membuka periode penilaian. Pastikan ada anggota aktif.';
-                    Swal.fire('Gagal', msg, 'error');
+                onSuccess: () => {
+                    Swal.fire({
+                        title: 'Berhasil!',
+                        text: 'Periode penilaian berhasil dibuka.',
+                        icon: 'success',
+                        confirmButtonColor: '#213448'
+                    });
                 }
             });
         }
     });
 };
 
-const toggleEdit = () => {
-    if (!isEditing.value) {
-        updateForm.nilai_data = props.nilai.map(n => ({
-            id_nilai: n.id_nilai,
-            nilai_disiplin: n.nilai_disiplin,
-            nilai_teknik: n.nilai_teknik,
-            nilai_kerjasama: n.nilai_kerjasama,
-            catatan_rapor: n.catatan_rapor
-        }));
-    } else {
-        updateForm.reset();
-    }
-    isEditing.value = !isEditing.value;
-};
+// Form Sync Harian
+const formSync = useForm({
+    id_eskul: props.idEskul,
+    semester: '',
+    tahun_ajaran: '',
+});
 
-const saveNilai = () => {
-    updateForm.put('/admin/nilai/update-bulk', {
-        preserveScroll: true,
-        onSuccess: () => {
-            isEditing.value = false;
-            Swal.fire('Tersimpan', 'Data nilai berhasil diperbarui.', 'success');
-        },
-        onError: () => Swal.fire('Gagal', 'Terjadi kesalahan validasi.', 'error')
+const syncFromDaily = () => {
+    formSync.semester = selectedSemester.value;
+    formSync.tahun_ajaran = selectedTahun.value;
+
+    Swal.fire({
+        title: 'Sinkronisasi Nilai Harian?',
+        text: `Nilai manual akan tertimpa dengan rata-rata harian untuk Semester ${selectedSemester.value} ${selectedTahun.value}. Lanjutkan?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#213448',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Ya, Sinkronkan!',
+        cancelButtonText: 'Batal',
+        reverseButtons: true
+    }).then((result) => {
+        if (result.isConfirmed) {
+            formSync.post('/admin/nilai/sync-daily', {
+                preserveScroll: true,
+                onSuccess: () => {
+                    Swal.fire({
+                        title: 'Berhasil!',
+                        text: 'Nilai berhasil ditarik dari data harian.',
+                        icon: 'success',
+                        confirmButtonColor: '#213448'
+                    });
+                }
+            });
+        }
     });
 };
 
-const downloadExcel = () => {
+// Form Bulk Update
+const formUpdate = useForm({
+    nilai_data: []
+});
+
+const saveChanges = () => {
+    processing.value = true;
+    formUpdate.nilai_data = props.nilai.map(item => ({
+        id_nilai: item.id_nilai,
+        nilai_teknik: item.nilai_teknik,
+        nilai_disiplin: item.nilai_disiplin,
+        nilai_kerjasama: item.nilai_kerjasama,
+        catatan_rapor: item.catatan_rapor
+    }));
+
+    formUpdate.put('/admin/nilai/update-bulk', {
+        preserveScroll: true,
+        onSuccess: () => {
+            isEditing.value = false;
+            processing.value = false;
+            Swal.fire({
+                title: 'Tersimpan!',
+                text: 'Semua perubahan berhasil disimpan.',
+                icon: 'success',
+                confirmButtonColor: '#213448'
+            });
+        },
+        onError: () => {
+            processing.value = false;
+            Swal.fire({
+                title: 'Gagal!',
+                text: 'Gagal menyimpan data. Silakan cek kembali inputan Anda.',
+                icon: 'error',
+                confirmButtonColor: '#213448'
+            });
+        }
+    });
+};
+
+const exportExcel = () => {
     const params = new URLSearchParams({
         id_eskul: props.idEskul,
         semester: selectedSemester.value,
-        tahun_ajaran: selectedTahun.value
+        tahun_ajaran: selectedTahun.value,
     }).toString();
+    
     window.open(`/admin/nilai/export?${params}`, '_blank');
 };
 
-const getPredikat = (n1, n2, n3) => {
-    const avg = (Number(n1) + Number(n2) + Number(n3)) / 3;
-    if (avg >= 90) return 'A';
-    if (avg >= 80) return 'B';
-    if (avg >= 70) return 'C';
+// Helper Display
+const getFinalScore = (t, d, k) => Math.round((Number(t) + Number(d) + Number(k)) / 3);
+const getPredikat = (score) => {
+    if (score >= 90) return 'A';
+    if (score >= 80) return 'B';
+    if (score >= 70) return 'C';
     return 'D';
 };
 </script>
 
 <template>
-    <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden w-full relative">
+    <div class="space-y-6">
         
-        <!-- Header dengan Filter "Time Travel" -->
-        <div class="bg-[#213448] px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
+        <!-- HEADER TOOLBAR -->
+        <div class="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
             
-            <!-- Kiri: Judul -->
-            <div class="flex items-center gap-2 text-[#EAE0CF]">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-[#94B4C1]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <h3 class="font-bold text-lg whitespace-nowrap">Penilaian & Rapor</h3>
-            </div>
-            
-            <!-- Kanan: Filter & Aksi -->
-            <div class="flex flex-wrap items-center justify-end gap-2 w-full md:w-auto">
-                
-                <!-- Dropdown Tahun -->
-                <select 
-                    v-model="selectedTahun" 
-                    @change="handleFilterChange"
-                    class="py-1.5 px-3 text-xs rounded-lg border-none bg-white/10 text-white focus:ring-2 focus:ring-[#547792] cursor-pointer"
-                >
-                    <option v-for="t in tahunOptions" :key="t" :value="t" class="text-gray-800">{{ t }}</option>
-                </select>
+            <!-- Kiri: Judul & Filter -->
+            <div class="flex flex-col md:flex-row md:items-center gap-4 w-full xl:w-auto">
+                <div>
+                    <h3 class="font-bold text-lg text-[#213448] flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Input Nilai Rapor
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-0.5">Kelola nilai akhir semester siswa</p>
+                </div>
 
-                <!-- Dropdown Semester -->
-                <select 
-                    v-model="selectedSemester" 
-                    @change="handleFilterChange"
-                    class="py-1.5 px-3 text-xs rounded-lg border-none bg-white/10 text-white focus:ring-2 focus:ring-[#547792] cursor-pointer"
-                >
-                    <option value="Ganjil" class="text-gray-800">Ganjil</option>
-                    <option value="Genap" class="text-gray-800">Genap</option>
-                </select>
+                <!-- Divider -->
+                <div class="hidden md:block h-8 w-px bg-gray-200 mx-2"></div>
 
-                <div class="w-px h-6 bg-white/20 mx-1"></div> <!-- Separator -->
-
-                <!-- Tombol Aksi (Hanya jika ada data) -->
-                <div v-if="hasData" class="flex gap-2">
-                    
-                    <!-- Tombol Download Excel -->
-                    <button 
-                        @click="downloadExcel"
-                        class="p-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 transition shadow-sm"
-                        title="Download Excel"
+                <!-- Filter Controls -->
+                <div class="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-200 shadow-sm">
+                    <!-- Dropdown Tahun -->
+                    <select 
+                        v-model="selectedTahun" 
+                        class="text-sm border-none bg-transparent focus:ring-0 text-gray-700 font-bold py-1 pl-2 pr-8 cursor-pointer hover:bg-white hover:shadow-sm rounded transition"
+                        title="Pilih Tahun Ajaran"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                        <option v-for="year in yearOptions" :key="year" :value="year">{{ year }}</option>
+                    </select>
+                    
+                    <div class="h-4 w-px bg-gray-300"></div>
+
+                    <!-- Dropdown Semester -->
+                    <select 
+                        v-model="selectedSemester" 
+                        class="text-sm border-none bg-transparent focus:ring-0 text-gray-700 font-bold py-1 pl-2 pr-8 cursor-pointer hover:bg-white hover:shadow-sm rounded transition"
+                        title="Pilih Semester"
+                    >
+                        <option value="Ganjil">Sem. Ganjil</option>
+                        <option value="Genap">Sem. Genap</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Kanan: Action Buttons -->
+            <div class="flex flex-wrap items-center gap-2 w-full xl:w-auto justify-end">
+                
+                <!-- KONDISI 1: Jika Data KOSONG -->
+                <button 
+                    v-if="nilai.length === 0"
+                    @click="generateNilai"
+                    class="px-4 py-2 bg-[#213448] text-[#EAE0CF] rounded-lg text-sm font-bold hover:bg-[#1a2a3a] transition flex items-center gap-2 shadow-sm"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Buka Periode Ini
+                </button>
+
+                <!-- KONDISI 2: Jika Data ADA -->
+                <template v-else>
+                    <button 
+                        @click="syncFromDaily"
+                        class="px-3 py-2 bg-white text-blue-600 border border-blue-200 rounded-lg text-sm font-medium hover:bg-blue-50 transition flex items-center gap-2 shadow-sm"
+                        title="Tarik nilai dari rata-rata harian"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span class="hidden md:inline">Sinkron Harian</span>
                     </button>
 
-                    <template v-if="!isEditing">
-                        <button @click="toggleEdit" class="text-xs bg-white/10 text-white px-3 py-1.5 rounded hover:bg-white hover:text-[#213448] transition flex items-center gap-1 font-bold shadow-sm border border-transparent">
-                            Edit Nilai
-                        </button>
-                    </template>
-                    
-                    <template v-else>
-                        <!-- Tombol "Hitung dari Harian" (Aktif) -->
-                        <button 
-                            @click="generateFromDaily"
-                            :disabled="syncForm.processing"
-                            class="text-xs bg-blue-500/20 text-blue-200 border border-blue-500/50 px-3 py-1.5 rounded hover:bg-blue-600 hover:text-white transition flex items-center gap-1"
-                            title="Ambil rata-rata dari nilai harian"
-                        >
-                            <svg v-if="!syncForm.processing" xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
-                            <span v-else>Syncing...</span>
-                            <span v-if="!syncForm.processing">Auto Hitung</span>
-                        </button>
+                    <button 
+                        @click="exportExcel"
+                        class="px-3 py-2 bg-white text-emerald-600 border border-emerald-200 rounded-lg text-sm font-medium hover:bg-emerald-50 transition flex items-center gap-2 shadow-sm"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Excel
+                    </button>
 
-                        <button @click="toggleEdit" class="text-xs bg-red-500/20 text-red-200 px-3 py-1.5 rounded hover:bg-red-500 hover:text-white transition">Batal</button>
-                        <button @click="saveNilai" :disabled="updateForm.processing" class="text-xs bg-emerald-500 text-white px-4 py-1.5 rounded hover:bg-emerald-600 transition shadow-sm font-bold">
-                            {{ updateForm.processing ? '...' : 'Simpan' }}
+                    <div class="hidden sm:block h-6 w-px bg-gray-300 mx-2"></div>
+
+                    <button 
+                        v-if="!isEditing"
+                        @click="isEditing = true"
+                        class="px-4 py-2 bg-yellow-500 text-white rounded-lg text-sm font-bold hover:bg-yellow-600 transition shadow-sm flex items-center gap-2"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                        </svg>
+                        Mode Edit
+                    </button>
+
+                    <div v-else class="flex gap-2">
+                        <button 
+                            @click="isEditing = false"
+                            class="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-300 transition"
+                        >
+                            Batal
                         </button>
-                    </template>
-                </div>
+                        <button 
+                            @click="saveChanges"
+                            :disabled="processing"
+                            class="px-4 py-2 bg-[#213448] text-[#EAE0CF] rounded-lg text-sm font-bold hover:bg-[#1a2a3a] transition shadow-sm flex items-center gap-2"
+                        >
+                            <svg v-if="processing" class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                            </svg>
+                            Simpan
+                        </button>
+                    </div>
+                </template>
             </div>
         </div>
 
-        <!-- STATE 1: LOCKED / BELUM ADA DATA -->
-        <div v-if="!hasData" class="p-10 flex flex-col items-center justify-center text-center bg-gray-50/50">
-            <div class="bg-gray-100 p-4 rounded-full mb-4 shadow-inner border border-gray-200">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        <!-- CONTENT AREA -->
+        
+        <!-- STATE 1: Data Belum Ada (Empty State) -->
+        <div v-if="nilai.length === 0" class="bg-white p-12 rounded-xl border border-dashed border-gray-300 text-center">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
             </div>
-            <h4 class="text-lg font-bold text-gray-700 mb-2">
-                Penilaian {{ selectedSemester }} {{ selectedTahun }} Terkunci
-            </h4>
-            <p class="text-gray-500 text-sm max-w-md mb-6">
-                Data penilaian untuk periode yang Anda pilih belum tersedia. Pastikan ada anggota aktif pada tahun ajaran ini sebelum membuka penilaian.
-            </p>
             
-            <div v-if="$page.props.errors?.message" class="mb-4 text-red-500 text-sm font-bold bg-red-50 px-4 py-2 rounded">
-                {{ $page.props.errors.message }}
-            </div>
+            <!-- Judul Empty State -->
+            <h3 class="text-lg font-bold text-gray-700">Belum Ada Data Nilai</h3>
+            
+            <!-- Deskripsi Dinamis sesuai Filter yang Dipilih -->
+            <p class="text-gray-500 max-w-lg mx-auto mt-2 mb-6">
+                Tidak ditemukan data nilai untuk <span class="font-bold text-[#213448]">Semester {{ selectedSemester }}</span> 
+                Tahun Ajaran <span class="font-bold text-[#213448]">{{ selectedTahun }}</span>.
+                <br><span class="text-xs">Silakan pilih semester lain di pojok kanan atas atau buka periode baru.</span>
+            </p>
 
-            <button @click="initializePenilaian" :disabled="generateForm.processing" class="px-6 py-2.5 rounded-lg bg-[#213448] text-[#EAE0CF] font-bold text-sm shadow-md hover:bg-[#547792] transition flex items-center gap-2 transform active:scale-95">
-                <span v-if="generateForm.processing">Memproses...</span>
-                <span v-else>Buka Periode Penilaian</span>
+            <button 
+                @click="generateNilai"
+                class="px-6 py-2.5 bg-[#213448] text-[#EAE0CF] rounded-lg font-bold hover:bg-[#1a2a3a] transition shadow-lg"
+            >
+                Buka Periode Ini
             </button>
         </div>
 
-        <!-- STATE 2: OPEN / TABEL NILAI -->
-        <div v-else class="overflow-x-auto">
-            <table class="w-full text-left border-collapse">
-                <thead class="bg-gray-50 text-gray-500 text-xs uppercase font-bold tracking-wider">
-                    <tr>
-                        <th class="px-6 py-3 border-b border-gray-100">Anggota</th>
-                        <th class="px-4 py-3 border-b border-gray-100 text-center w-24">% Hadir</th>
-                        <th class="px-4 py-3 border-b border-gray-100 text-center w-24">Disiplin</th>
-                        <th class="px-4 py-3 border-b border-gray-100 text-center w-24">Teknik</th>
-                        <th class="px-4 py-3 border-b border-gray-100 text-center w-24">Kerjasama</th>
-                        <th class="px-4 py-3 border-b border-gray-100 text-center w-20">Predikat</th>
-                        <th class="px-6 py-3 border-b border-gray-100 w-64">Catatan</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100">
-                    <tr v-for="(item, index) in nilai" :key="item.id_nilai" class="hover:bg-gray-50 transition-colors group">
-                        
-                        <td class="px-6 py-3">
-                            <div class="flex items-center gap-3">
-                                <div class="w-8 h-8 rounded-full bg-[#547792]/10 text-[#547792] flex items-center justify-center text-xs font-bold shrink-0 border border-[#547792]/20">
-                                    {{ item.anggota_eskul?.peserta?.nama_lengkap?.charAt(0) || '?' }}
+        <!-- STATE 2: Tabel Penilaian -->
+        <div v-else class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-gray-50 text-gray-500 text-xs uppercase font-bold tracking-wider">
+                        <tr>
+                            <th class="px-6 py-4 border-b border-gray-100 w-10">No</th>
+                            <th class="px-6 py-4 border-b border-gray-100">Nama Siswa</th>
+                            <th class="px-6 py-4 border-b border-gray-100 text-center w-24">Statistik</th>
+                            <th class="px-2 py-4 border-b border-gray-100 text-center w-20">Teknik</th>
+                            <th class="px-2 py-4 border-b border-gray-100 text-center w-20">Disiplin</th>
+                            <th class="px-2 py-4 border-b border-gray-100 text-center w-20">Kerjasama</th>
+                            <th class="px-2 py-4 border-b border-gray-100 text-center w-20 bg-gray-100">Akhir</th>
+                            <th class="px-6 py-4 border-b border-gray-100">Catatan Rapor</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        <tr v-for="(item, index) in nilai" :key="item.id_nilai" class="hover:bg-gray-50 transition-colors group">
+                            <td class="px-6 py-4 text-center text-sm text-gray-400">{{ index + 1 }}</td>
+                            <td class="px-6 py-4">
+                                <p class="text-sm font-bold text-gray-800">{{ item.anggota_eskul?.peserta?.nama_lengkap }}</p>
+                                <p class="text-xs text-gray-500">{{ item.anggota_eskul?.peserta?.tingkat_kelas }} - {{ item.anggota_eskul?.peserta?.jenis_kelamin }}</p>
+                            </td>
+                            
+                            <!-- Statistik Kehadiran (Read Only) -->
+                            <td class="px-6 py-4 text-center">
+                                <div class="flex flex-col items-center">
+                                    <span class="text-xs font-bold text-[#547792]">
+                                        {{ item.persentase_hadir }}%
+                                    </span>
+                                    <span class="text-[10px] text-gray-400">
+                                        {{ item.statistik_hadir }}/{{ item.total_pertemuan }} H
+                                    </span>
                                 </div>
-                                <div>
-                                    <p class="text-sm font-bold text-gray-800">{{ item.anggota_eskul?.peserta?.nama_lengkap || 'Unknown' }}</p>
-                                    <p class="text-[10px] text-gray-500">Kls {{ item.anggota_eskul?.peserta?.tingkat_kelas || '-' }}</p>
+                            </td>
+
+                            <!-- Input Nilai -->
+                            <td class="px-2 py-4 text-center">
+                                <input 
+                                    v-if="isEditing" 
+                                    v-model.number="item.nilai_teknik" 
+                                    type="number" min="0" max="100" 
+                                    class="w-16 text-center text-sm border-gray-300 rounded focus:ring-[#547792] focus:border-[#547792]"
+                                >
+                                <span v-else class="text-sm font-medium text-gray-700">{{ item.nilai_teknik }}</span>
+                            </td>
+                            <td class="px-2 py-4 text-center">
+                                <input 
+                                    v-if="isEditing" 
+                                    v-model.number="item.nilai_disiplin" 
+                                    type="number" min="0" max="100" 
+                                    class="w-16 text-center text-sm border-gray-300 rounded focus:ring-[#547792] focus:border-[#547792]"
+                                >
+                                <span v-else class="text-sm font-medium text-gray-700">{{ item.nilai_disiplin }}</span>
+                            </td>
+                            <td class="px-2 py-4 text-center">
+                                <input 
+                                    v-if="isEditing" 
+                                    v-model.number="item.nilai_kerjasama" 
+                                    type="number" min="0" max="100" 
+                                    class="w-16 text-center text-sm border-gray-300 rounded focus:ring-[#547792] focus:border-[#547792]"
+                                >
+                                <span v-else class="text-sm font-medium text-gray-700">{{ item.nilai_kerjasama }}</span>
+                            </td>
+
+                            <!-- Nilai Akhir (Auto Calculated) -->
+                            <td class="px-2 py-4 text-center bg-gray-50">
+                                <div class="flex flex-col items-center">
+                                    <span class="text-sm font-bold text-[#213448]">
+                                        {{ getFinalScore(item.nilai_teknik, item.nilai_disiplin, item.nilai_kerjasama) }}
+                                    </span>
+                                    <span class="text-[10px] font-bold px-1.5 rounded bg-gray-200 text-gray-600">
+                                        {{ getPredikat(getFinalScore(item.nilai_teknik, item.nilai_disiplin, item.nilai_kerjasama)) }}
+                                    </span>
                                 </div>
-                            </div>
-                        </td>
-                        
-                        <!-- % Hadir -->
-                        <td class="px-4 py-3 text-center">
-                            <span 
-                                class="inline-flex items-center justify-center px-2 py-1 rounded text-xs font-bold border"
-                                :class="item.persentase_hadir >= 75 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'"
-                                :title="`${item.statistik_hadir} dari ${item.total_pertemuan} pertemuan`"
-                            >
-                                {{ item.persentase_hadir }}%
-                            </span>
-                        </td>
+                            </td>
 
-                        <!-- Input Fields -->
-                        <td class="px-4 py-3 text-center">
-                            <input v-if="isEditing" type="number" min="0" max="100" v-model="updateForm.nilai_data[index].nilai_disiplin" class="w-16 px-1 py-1 text-center text-sm border border-gray-300 rounded focus:ring-[#547792] focus:border-[#547792] shadow-sm">
-                            <span v-else class="text-sm font-medium text-gray-700">{{ item.nilai_disiplin }}</span>
-                        </td>
-                        <td class="px-4 py-3 text-center">
-                            <input v-if="isEditing" type="number" min="0" max="100" v-model="updateForm.nilai_data[index].nilai_teknik" class="w-16 px-1 py-1 text-center text-sm border border-gray-300 rounded focus:ring-[#547792] focus:border-[#547792] shadow-sm">
-                            <span v-else class="text-sm font-medium text-gray-700">{{ item.nilai_teknik }}</span>
-                        </td>
-                        <td class="px-4 py-3 text-center">
-                            <input v-if="isEditing" type="number" min="0" max="100" v-model="updateForm.nilai_data[index].nilai_kerjasama" class="w-16 px-1 py-1 text-center text-sm border border-gray-300 rounded focus:ring-[#547792] focus:border-[#547792] shadow-sm">
-                            <span v-else class="text-sm font-medium text-gray-700">{{ item.nilai_kerjasama }}</span>
-                        </td>
-
-                        <!-- Predikat -->
-                        <td class="px-4 py-3 text-center">
-                            <span 
-                                class="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold border transition-colors duration-300"
-                                :class="{
-                                    'bg-emerald-100 text-emerald-700 border-emerald-200': (isEditing ? getPredikat(updateForm.nilai_data[index].nilai_disiplin, updateForm.nilai_data[index].nilai_teknik, updateForm.nilai_data[index].nilai_kerjasama) : getPredikat(item.nilai_disiplin, item.nilai_teknik, item.nilai_kerjasama)) === 'A',
-                                    'bg-blue-100 text-blue-700 border-blue-200': (isEditing ? getPredikat(updateForm.nilai_data[index].nilai_disiplin, updateForm.nilai_data[index].nilai_teknik, updateForm.nilai_data[index].nilai_kerjasama) : getPredikat(item.nilai_disiplin, item.nilai_teknik, item.nilai_kerjasama)) === 'B',
-                                    'bg-yellow-100 text-yellow-700 border-yellow-200': (isEditing ? getPredikat(updateForm.nilai_data[index].nilai_disiplin, updateForm.nilai_data[index].nilai_teknik, updateForm.nilai_data[index].nilai_kerjasama) : getPredikat(item.nilai_disiplin, item.nilai_teknik, item.nilai_kerjasama)) === 'C',
-                                    'bg-red-100 text-red-700 border-red-200': (isEditing ? getPredikat(updateForm.nilai_data[index].nilai_disiplin, updateForm.nilai_data[index].nilai_teknik, updateForm.nilai_data[index].nilai_kerjasama) : getPredikat(item.nilai_disiplin, item.nilai_teknik, item.nilai_kerjasama)) === 'D',
-                                }"
-                            >
-                                {{ isEditing ? getPredikat(updateForm.nilai_data[index].nilai_disiplin, updateForm.nilai_data[index].nilai_teknik, updateForm.nilai_data[index].nilai_kerjasama) : getPredikat(item.nilai_disiplin, item.nilai_teknik, item.nilai_kerjasama) }}
-                            </span>
-                        </td>
-
-                        <!-- Catatan -->
-                        <td class="px-6 py-3">
-                            <textarea v-if="isEditing" v-model="updateForm.nilai_data[index].catatan_rapor" rows="1" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-[#547792] focus:border-[#547792] shadow-sm resize-none" placeholder="Catatan..."></textarea>
-                            <p v-else class="text-xs text-gray-500 italic truncate max-w-[200px]">{{ item.catatan_rapor || '-' }}</p>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+                            <!-- Catatan -->
+                            <td class="px-6 py-4">
+                                <textarea 
+                                    v-if="isEditing" 
+                                    v-model="item.catatan_rapor" 
+                                    rows="2"
+                                    class="w-full text-xs border-gray-300 rounded focus:ring-[#547792] focus:border-[#547792] resize-none"
+                                    placeholder="Catatan perkembangan siswa..."
+                                ></textarea>
+                                <p v-else class="text-xs text-gray-600 italic line-clamp-2" :title="item.catatan_rapor">
+                                    {{ item.catatan_rapor || '-' }}
+                                </p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Footer Info -->
+            <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 text-xs text-gray-500 flex justify-between">
+                <span>Total Siswa Dinilai: <b>{{ nilai.length }}</b></span>
+                <span class="italic text-gray-400">Filter: {{ selectedSemester }} {{ selectedTahun }}</span>
+            </div>
         </div>
     </div>
 </template>

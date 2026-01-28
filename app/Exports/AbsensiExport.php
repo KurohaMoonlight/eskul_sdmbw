@@ -3,7 +3,8 @@
 namespace App\Exports;
 
 use App\Models\Absensi;
-use App\Models\Eskul; // Import model Eskul untuk ambil nama pembimbing
+use App\Models\Eskul; // Tambahkan Model Eskul
+use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
@@ -15,23 +16,24 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use Carbon\Carbon;
 
 class AbsensiExport implements FromCollection, WithHeadings, WithMapping, WithStyles, ShouldAutoSize, WithEvents
 {
     protected $idEskul;
     protected $filters;
-    protected $eskulName;
-    protected $pembimbingName; // Tambahan properti nama pembimbing
+    protected $namaEskul;
+    protected $namaPembimbing; // Properti baru untuk nama pembimbing
 
-    public function __construct($idEskul, $filters, $eskulName)
+    public function __construct($idEskul, $filters, $namaEskul)
     {
         $this->idEskul = $idEskul;
         $this->filters = $filters;
-        $this->eskulName = $eskulName;
-
-        // Ambil nama pembimbing dari relasi Eskul
+        $this->namaEskul = $namaEskul;
+        
+        // Ambil data Pembimbing berdasarkan ID Eskul
         $eskul = Eskul::with('pembimbing')->find($idEskul);
-        $this->pembimbingName = $eskul->pembimbing ? $eskul->pembimbing->nama_lengkap : '-';
+        $this->namaPembimbing = $eskul->pembimbing ? $eskul->pembimbing->nama_lengkap : '-';
     }
 
     /**
@@ -39,77 +41,136 @@ class AbsensiExport implements FromCollection, WithHeadings, WithMapping, WithSt
     */
     public function collection()
     {
-        $query = Absensi::with(['peserta', 'kegiatan'])
+        // 1. Base Query dengan Eager Loading
+        $queryLog = Absensi::with(['peserta', 'kegiatan', 'nilai_harian'])
             ->whereHas('kegiatan', function($q) {
                 $q->where('id_eskul', $this->idEskul);
             });
 
-        // Filter Search
+        // 2. Filter Search Nama
         if (!empty($this->filters['search'])) {
-            $query->whereHas('peserta', function($q) {
-                $q->where('nama_lengkap', 'like', '%' . $this->filters['search'] . '%');
+            $search = $this->filters['search'];
+            $queryLog->whereHas('peserta', function($q) use ($search) {
+                $q->where('nama_lengkap', 'like', '%' . $search . '%');
             });
         }
 
-        // Filter Status
+        // 3. Filter Status
         if (!empty($this->filters['status'])) {
-            $query->where('status', $this->filters['status']);
+            $queryLog->where('status', $this->filters['status']);
         }
 
-        // Filter Tanggal
+        // 4. Filter Tanggal
         if (!empty($this->filters['start_date']) && !empty($this->filters['end_date'])) {
-            $query->whereHas('kegiatan', function($q) {
-                $q->whereBetween('tanggal', [$this->filters['start_date'], $this->filters['end_date']]);
+            $startDate = $this->filters['start_date'];
+            $endDate = $this->filters['end_date'];
+            $queryLog->whereHas('kegiatan', function($q) use ($startDate, $endDate) {
+                $q->whereBetween('tanggal', [$startDate, $endDate]);
             });
         }
 
-        return $query->join('kegiatan', 'absensi.id_kegiatan', '=', 'kegiatan.id_kegiatan')
-            ->orderBy('kegiatan.tanggal', 'desc')
-            ->select('absensi.*')
-            ->get();
+        // 5. Filter & Sorting Score Mode
+        if (!empty($this->filters['score_mode'])) {
+            $scoreMode = $this->filters['score_mode'];
+            
+            $queryLog->leftJoin('nilai_harian', 'absensi.id_absensi', '=', 'nilai_harian.id_absensi')
+                     ->select('absensi.*');
+
+            $rawAvgScore = '(COALESCE(nilai_harian.skor_teknik, 0) + COALESCE(nilai_harian.skor_disiplin, 0) + COALESCE(nilai_harian.skor_kerjasama, 0)) / 3';
+
+            if ($scoreMode === 'highest') {
+                $queryLog->orderByRaw("$rawAvgScore DESC");
+            } elseif ($scoreMode === 'lowest') {
+                $queryLog->where('absensi.status', 'Hadir')
+                         ->orderByRaw("$rawAvgScore ASC");
+            } elseif ($scoreMode === 'under_70') {
+                $queryLog->where('absensi.status', 'Hadir')
+                         ->whereRaw("$rawAvgScore < 70")
+                         ->orderByRaw("$rawAvgScore ASC");
+            }
+        } else {
+            // Default Sorting
+            $queryLog->join('kegiatan', 'absensi.id_kegiatan', '=', 'kegiatan.id_kegiatan')
+                     ->select('absensi.*')
+                     ->orderBy('kegiatan.tanggal', 'desc');
+        }
+
+        return $queryLog->get();
     }
 
-    public function map($absensi): array
+    /**
+     * Mapping data per baris
+     */
+    public function map($row): array
     {
-        static $no = 0;
-        $no++;
+        $teknik = $row->nilai_harian->skor_teknik ?? 0;
+        $disiplin = $row->nilai_harian->skor_disiplin ?? 0;
+        $kerjasama = $row->nilai_harian->skor_kerjasama ?? 0;
+        
+        $avg = 0;
+        if ($row->status === 'Hadir') {
+            $avg = round(($teknik + $disiplin + $kerjasama) / 3, 2);
+        }
+
+        $tanggal = Carbon::parse($row->kegiatan->tanggal)->translatedFormat('d F Y');
 
         return [
-            $no,
-            \Carbon\Carbon::parse($absensi->kegiatan->tanggal)->format('d-m-Y'),
-            $absensi->peserta->nama_lengkap,
-            $absensi->peserta->tingkat_kelas,
-            strtoupper($absensi->status),
-            $absensi->kegiatan->materi_kegiatan ?? '-',
+            $tanggal,
+            $row->peserta->nama_lengkap,
+            $row->peserta->tingkat_kelas,
+            $row->status,
+            $row->status === 'Hadir' ? $teknik : '-',
+            $row->status === 'Hadir' ? $disiplin : '-',
+            $row->status === 'Hadir' ? $kerjasama : '-',
+            $row->status === 'Hadir' ? $avg : '-',
+            $row->nilai_harian->catatan_harian ?? '-',
+            $row->kegiatan->materi_kegiatan,
         ];
     }
 
+    /**
+     * Header Kolom
+     */
     public function headings(): array
     {
-        // Custom Header: Baris 1-4 untuk Judul, Baris 5 untuk Header Tabel
         return [
-            ['LAPORAN ABSENSI EKSTRAKURIKULER'],
-            [strtoupper($this->eskulName)],
-            ['SD Muhammadiyah Birrul Walidain'],
-            [' '], // Spasi
-            ['NO', 'TANGGAL', 'NAMA SISWA', 'KELAS', 'STATUS', 'MATERI KEGIATAN'], // Header Tabel Data
+            ['LAPORAN ABSENSI & NILAI HARIAN EKSTRAKURIKULER'],
+            ['Eskul: ' . $this->namaEskul],
+            ['Pembimbing: ' . $this->namaPembimbing], // Tambahan Nama Pembimbing
+            ['Dicetak Pada: ' . Carbon::now()->translatedFormat('d F Y H:i')],
+            [''], 
+            [     
+                'TANGGAL',
+                'NAMA SISWA',
+                'KELAS',
+                'STATUS',
+                'TEKNIK',
+                'DISIPLIN',
+                'KERJASAMA',
+                'RATA-RATA',
+                'CATATAN',
+                'MATERI KEGIATAN'
+            ]
         ];
     }
 
+    /**
+     * Styling Dasar
+     */
     public function styles(Worksheet $sheet)
     {
         return [
-            // Styling Judul (Baris 1, 2, 3)
-            1 => ['font' => ['bold' => true, 'size' => 14], 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]],
-            2 => ['font' => ['bold' => true, 'size' => 12], 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]],
-            3 => ['font' => ['size' => 10], 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]],
+            1 => ['font' => ['bold' => true, 'size' => 14]],
+            2 => ['font' => ['bold' => true, 'size' => 12]],
+            3 => ['font' => ['bold' => true, 'size' => 12]],
+            4 => ['font' => ['italic' => true, 'size' => 10]],
             
-            // Styling Header Tabel (Baris 5)
-            5 => [
+            // Header Tabel (Sekarang di baris 6)
+            6 => [
                 'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
                 'fill' => [
                     'fillType' => Fill::FILL_SOLID,
-                    'startColor' => ['rgb' => '213448'] // Warna Biru Tema
+                    'startColor' => ['rgb' => '213448'] // Warna Header Biru Gelap
                 ],
                 'alignment' => [
                     'horizontal' => Alignment::HORIZONTAL_CENTER,
@@ -119,134 +180,51 @@ class AbsensiExport implements FromCollection, WithHeadings, WithMapping, WithSt
         ];
     }
 
+    /**
+     * Event untuk styling lanjutan
+     */
     public function registerEvents(): array
     {
         return [
             AfterSheet::class => function(AfterSheet $event) {
                 $sheet = $event->sheet;
-                $highestRow = $sheet->getHighestRow(); // Baris terakhir data
-                $highestColumn = $sheet->getHighestColumn();
+                $highestRow = $sheet->getHighestRow();
 
-                // 1. Merge Cells untuk Judul (A1 sampai F1, dst)
-                $sheet->mergeCells('A1:F1');
-                $sheet->mergeCells('A2:F2');
-                $sheet->mergeCells('A3:F3');
+                // Merge Title Cells
+                $sheet->mergeCells('A1:J1');
+                $sheet->mergeCells('A2:J2');
+                $sheet->mergeCells('A3:J3');
+                $sheet->mergeCells('A4:J4');
 
-                // 2. Tambahkan Border ke Seluruh Tabel Data (Mulai baris 5 sampai akhir data)
-                $styleArray = [
+                // Alignment Left untuk Informasi Header
+                $sheet->getStyle('A1:A4')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+
+                // Styling Tabel Data (Border & Zebra Striping)
+                $styleBorder = [
                     'borders' => [
                         'allBorders' => [
                             'borderStyle' => Border::BORDER_THIN,
-                            'color' => ['rgb' => '000000'],
+                            'color' => ['argb' => '000000'],
                         ],
                     ],
-                    'alignment' => [
-                        'vertical' => Alignment::VERTICAL_CENTER,
-                    ],
                 ];
-                $sheet->getStyle('A5:' . $highestColumn . $highestRow)->applyFromArray($styleArray);
+                
+                // Terapkan border dari header tabel (A6) sampai bawah
+                $sheet->getStyle('A6:J' . $highestRow)->applyFromArray($styleBorder);
+                
+                // Alignment Data Tabel
+                $sheet->getStyle('A7:A' . $highestRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); // Tanggal
+                $sheet->getStyle('C7:H' . $highestRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); // Kelas, Status, Nilai
+                $sheet->getStyle('I7:J' . $highestRow)->getAlignment()->setWrapText(true); // Catatan & Materi
 
-                // 3. Center Alignment untuk Kolom Tertentu
-                $sheet->getStyle('A6:A' . $highestRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); // No
-                $sheet->getStyle('B6:B' . $highestRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); // Tanggal
-                $sheet->getStyle('D6:D' . $highestRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); // Kelas
-                $sheet->getStyle('E6:E' . $highestRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); // Status
-
-                // 4. Conditional Formatting: Warna Cell Status
-                $totalHadir = 0;
-                $totalSakit = 0;
-                $totalIzin = 0;
-                $totalAlpha = 0;
-                $totalData = $highestRow - 5; // Total baris data (dikurangi 5 baris header)
-
-                for ($row = 6; $row <= $highestRow; $row++) {
-                    $statusCell = $sheet->getCell('E' . $row);
-                    $statusValue = $statusCell->getValue();
-                    $color = 'FFFFFF'; 
-
-                    if ($statusValue === 'HADIR') {
-                        $color = 'D1FAE5'; $totalHadir++;
-                    } elseif ($statusValue === 'SAKIT') {
-                        $color = 'FEF3C7'; $totalSakit++;
-                    } elseif ($statusValue === 'IZIN') {
-                        $color = 'DBEAFE'; $totalIzin++;
-                    } elseif ($statusValue === 'ALPHA') {
-                        $color = 'FEE2E2'; $totalAlpha++;
+                // Tambahkan Zebra Striping (Warna selang-seling) untuk baris data
+                for ($row = 7; $row <= $highestRow; $row++) {
+                    if ($row % 2 == 0) { // Baris Genap
+                        $sheet->getStyle('A' . $row . ':J' . $row)->getFill()
+                            ->setFillType(Fill::FILL_SOLID)
+                            ->getStartColor()->setARGB('F9FAFB'); // Abu-abu sangat muda (cool gray 50)
                     }
-
-                    $sheet->getStyle('E' . $row)->getFill()
-                        ->setFillType(Fill::FILL_SOLID)
-                        ->getStartColor()->setARGB($color);
                 }
-
-                // --- BAGIAN BARU: FOOTER & STATISTIK ---
-                
-                $footerRow = $highestRow + 2; // Mulai 2 baris setelah data terakhir
-
-                // A. Tanda Tangan & Tanggal Cetak
-                $dateNow = \Carbon\Carbon::now()->isoFormat('D MMMM Y');
-                
-                // Set Tanggal Cetak di sebelah kanan
-                $sheet->setCellValue('E' . $footerRow, 'Bondowoso, ' . $dateNow);
-                $sheet->mergeCells('E' . $footerRow . ':F' . $footerRow); // Merge biar muat
-                
-                $sheet->setCellValue('E' . ($footerRow + 1), 'Pembimbing Ekstrakurikuler');
-                $sheet->mergeCells('E' . ($footerRow + 1) . ':F' . ($footerRow + 1));
-
-                // Nama Pembimbing (dengan garis bawah/underline)
-                $sheet->setCellValue('E' . ($footerRow + 5), $this->pembimbingName);
-                $sheet->mergeCells('E' . ($footerRow + 5) . ':F' . ($footerRow + 5));
-                $sheet->getStyle('E' . ($footerRow + 5))->getFont()->setBold(true)->setUnderline(true);
-                
-                // Alignment Center untuk Tanda Tangan
-                $sheet->getStyle('E' . $footerRow . ':E' . ($footerRow + 5))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-
-
-                // B. Statistik Ringkas & Grafik Batang (Di sebelah kiri footer)
-                // Kita buat visualisasi sederhana dengan background cell sebagai bar chart
-                
-                $statsStartRow = $footerRow;
-                $sheet->setCellValue('A' . $statsStartRow, 'RINGKASAN KEHADIRAN');
-                $sheet->getStyle('A' . $statsStartRow)->getFont()->setBold(true);
-
-                // Hitung Persentase
-                $persenHadir = $totalData > 0 ? round(($totalHadir / $totalData) * 100) : 0;
-                
-                // Baris Statistik Hadir
-                $sheet->setCellValue('A' . ($statsStartRow + 1), 'Hadir');
-                $sheet->setCellValue('B' . ($statsStartRow + 1), $totalHadir . ' (' . $persenHadir . '%)');
-                // Visualisasi Bar Chart Hadir (Cell C diwarnai hijau sesuai persentase - simulasi kasar)
-                // Karena excel cell tidak bisa partial fill mudah, kita warnai full jika > 0
-                if ($totalHadir > 0) {
-                    $sheet->getStyle('C' . ($statsStartRow + 1))->getFill()
-                        ->setFillType(Fill::FILL_SOLID)
-                        ->getStartColor()->setARGB('D1FAE5'); // Hijau
-                    $sheet->setCellValue('C' . ($statsStartRow + 1), str_repeat('|', $persenHadir / 5)); // Grafik text manual
-                    $sheet->getStyle('C' . ($statsStartRow + 1))->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('10B981'));
-                }
-
-                // Baris Statistik Sakit/Izin
-                $sheet->setCellValue('A' . ($statsStartRow + 2), 'Sakit/Izin');
-                $sheet->setCellValue('B' . ($statsStartRow + 2), ($totalSakit + $totalIzin));
-                
-                // Baris Statistik Alpha
-                $sheet->setCellValue('A' . ($statsStartRow + 3), 'Alpha');
-                $sheet->setCellValue('B' . ($statsStartRow + 3), $totalAlpha);
-                if ($totalAlpha > 0) {
-                    $sheet->getStyle('C' . ($statsStartRow + 3))->getFill()
-                        ->setFillType(Fill::FILL_SOLID)
-                        ->getStartColor()->setARGB('FEE2E2'); // Merah
-                    $sheet->setCellValue('C' . ($statsStartRow + 3), 'Perlu Perhatian');
-                    $sheet->getStyle('C' . ($statsStartRow + 3))->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('EF4444'));
-                }
-
-                // Border kotak statistik
-                $sheet->getStyle('A' . $statsStartRow . ':C' . ($statsStartRow + 3))->applyFromArray([
-                    'borders' => [
-                        'outline' => ['borderStyle' => Border::BORDER_THIN]
-                    ]
-                ]);
-
             },
         ];
     }

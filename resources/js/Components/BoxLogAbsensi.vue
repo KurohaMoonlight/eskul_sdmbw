@@ -42,7 +42,7 @@ const search = ref(props.filters.search || '');
 const startDate = ref(props.filters.start_date || '');
 const endDate = ref(props.filters.end_date || '');
 const statusFilter = ref(props.filters.status || '');
-const scoreFilter = ref(props.filters.score_mode || ''); // Filter Nilai Baru
+const scoreFilter = ref(props.filters.score_mode || ''); // State untuk Filter Nilai
 
 const applyFilter = debounce(() => {
     router.get(
@@ -52,7 +52,7 @@ const applyFilter = debounce(() => {
             start_date: startDate.value,
             end_date: endDate.value,
             status: statusFilter.value,
-            score_mode: scoreFilter.value, // Kirim parameter filter nilai
+            score_mode: scoreFilter.value, // Kirim parameter score_mode
             mode: 'log_filter' 
         },
         { 
@@ -63,8 +63,8 @@ const applyFilter = debounce(() => {
     );
 }, 500);
 
-// Watcher untuk semua filter
-watch([search, statusFilter, startDate, endDate, scoreFilter], applyFilter);
+// Watch semua filter termasuk scoreFilter
+watch([search, statusFilter, scoreFilter, startDate, endDate], applyFilter);
 
 const printLog = () => {
     const params = new URLSearchParams({
@@ -180,7 +180,7 @@ const getStatusBadge = (status) => {
                         <option value="Alpha" class="text-gray-800">Alpha</option>
                     </select>
 
-                    <!-- NEW: Score Filter (FILTER NILAI BARU) -->
+                    <!-- NEW: Score Filter -->
                     <select v-model="scoreFilter" class="py-1.5 px-2 text-sm rounded-lg border-none bg-white/10 text-white focus:ring-2 focus:ring-[#547792]">
                         <option value="" class="text-gray-800">Filter Nilai</option>
                         <option value="highest" class="text-gray-800">Tertinggi</option>
@@ -198,19 +198,20 @@ const getStatusBadge = (status) => {
                             <th class="px-6 py-3 border-b border-gray-100">Tanggal & Sesi</th>
                             <th class="px-6 py-3 border-b border-gray-100">Siswa</th>
                             <th class="px-6 py-3 border-b border-gray-100">Status</th>
-                            <!-- Kolom Nilai Baru -->
+                            
+                            <!-- Header Kolom Nilai -->
                             <th class="px-2 py-3 border-b border-gray-100 text-center" title="Teknik">Tek</th>
                             <th class="px-2 py-3 border-b border-gray-100 text-center" title="Disiplin">Dis</th>
                             <th class="px-2 py-3 border-b border-gray-100 text-center" title="Kerjasama">Ker</th>
-                            <th class="px-6 py-3 border-b border-gray-100">Catatan Harian</th>
-                            <!-- End Kolom Nilai -->
+                            <th class="px-6 py-3 border-b border-gray-100">Catatan</th>
+                            
                             <th class="px-6 py-3 border-b border-gray-100">Materi Kegiatan</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
                         <tr v-if="logs.data.length === 0">
                             <td colspan="8" class="px-6 py-8 text-center text-gray-400 italic text-sm">
-                                Tidak ada data absensi/nilai ditemukan.
+                                Tidak ada data absensi ditemukan.
                             </td>
                         </tr>
                         
@@ -240,14 +241,14 @@ const getStatusBadge = (status) => {
                                 </span>
                             </td>
 
-                            <!-- Menampilkan Nilai (Read Only) -->
-                            <td class="px-2 py-3 text-center text-sm text-gray-700 font-medium">
+                            <!-- Data Nilai Harian -->
+                            <td class="px-2 py-3 text-center text-sm font-medium text-gray-700">
                                 {{ log.nilai_harian?.skor_teknik ?? '-' }}
                             </td>
-                            <td class="px-2 py-3 text-center text-sm text-gray-700 font-medium">
+                            <td class="px-2 py-3 text-center text-sm font-medium text-gray-700">
                                 {{ log.nilai_harian?.skor_disiplin ?? '-' }}
                             </td>
-                            <td class="px-2 py-3 text-center text-sm text-gray-700 font-medium">
+                            <td class="px-2 py-3 text-center text-sm font-medium text-gray-700">
                                 {{ log.nilai_harian?.skor_kerjasama ?? '-' }}
                             </td>
                             <td class="px-6 py-3">

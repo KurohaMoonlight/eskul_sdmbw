@@ -4,6 +4,9 @@ namespace App\Exports;
 
 use App\Models\Nilai;
 use App\Models\Eskul;
+use App\Models\Kegiatan;
+use App\Models\Absensi;
+use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
@@ -15,140 +18,218 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use Carbon\Carbon;
 
 class NilaiExport implements FromCollection, WithHeadings, WithMapping, WithStyles, ShouldAutoSize, WithEvents
 {
     protected $idEskul;
     protected $semester;
     protected $tahunAjaran;
-    protected $eskulName;
-    protected $pembimbingName;
+    
+    // Data Pendukung untuk Header
+    protected $namaEskul;
+    protected $namaPembimbing;
+    protected $idKegiatanSemester; // Untuk hitung absensi
 
-    public function __construct($idEskul, $semester, $tahunAjaran, $eskulName, $pembimbingName)
+    public function __construct($idEskul, $semester, $tahunAjaran)
     {
         $this->idEskul = $idEskul;
         $this->semester = $semester;
         $this->tahunAjaran = $tahunAjaran;
-        $this->eskulName = $eskulName;
-        $this->pembimbingName = $pembimbingName;
+
+        // Ambil Info Eskul & Pembimbing
+        $eskul = Eskul::with('pembimbing')->find($idEskul);
+        $this->namaEskul = $eskul ? $eskul->nama_eskul : '-';
+        $this->namaPembimbing = ($eskul && $eskul->pembimbing) ? $eskul->pembimbing->nama_lengkap : '-';
+
+        // Pre-fetch ID Kegiatan dalam semester ini untuk efisiensi query kehadiran
+        $dateRange = $this->getSemesterDateRange($semester, $tahunAjaran);
+        $this->idKegiatanSemester = Kegiatan::where('id_eskul', $idEskul)
+            ->whereBetween('tanggal', $dateRange)
+            ->pluck('id_kegiatan');
     }
 
+    /**
+     * Helper Date Range (Sama seperti di Controller)
+     */
+    private function getSemesterDateRange($semester, $tahunAjaran)
+    {
+        $years = explode('/', $tahunAjaran);
+        if (count($years) < 2) {
+             $y = date('Y');
+             $years = [$y, $y+1];
+        }
+        $startYear = (int)$years[0];
+        $endYear = (int)$years[1];
+
+        if ($semester === 'Ganjil') {
+            return [
+                Carbon::create($startYear, 7, 1)->startOfDay()->format('Y-m-d'),
+                Carbon::create($startYear, 12, 31)->endOfDay()->format('Y-m-d')
+            ];
+        } else {
+            return [
+                Carbon::create($endYear, 1, 1)->startOfDay()->format('Y-m-d'),
+                Carbon::create($endYear, 6, 30)->endOfDay()->format('Y-m-d')
+            ];
+        }
+    }
+
+    /**
+    * @return \Illuminate\Support\Collection
+    */
     public function collection()
     {
-        // Ambil data nilai beserta relasi peserta
         return Nilai::with(['anggota_eskul.peserta'])
             ->where('id_eskul', $this->idEskul)
             ->where('semester', $this->semester)
             ->where('tahun_ajaran', $this->tahunAjaran)
             ->get()
-            // Urutkan berdasarkan nama siswa
-            ->sortBy(function($nilai) {
-                return $nilai->anggota_eskul->peserta->nama_lengkap;
+            ->sortBy(function($item) {
+                // Sort berdasarkan nama peserta
+                return $item->anggota_eskul->peserta->nama_lengkap;
             });
     }
 
-    public function map($nilai): array
+    /**
+     * Mapping data per baris
+     */
+    public function map($row): array
     {
-        static $no = 0;
-        $no++;
+        // 1. Hitung Nilai Akhir
+        $t = $row->nilai_teknik ?? 0;
+        $d = $row->nilai_disiplin ?? 0;
+        $k = $row->nilai_kerjasama ?? 0;
+        $akhir = round(($t + $d + $k) / 3);
 
-        // Hitung Predikat
-        $avg = ($nilai->nilai_disiplin + $nilai->nilai_teknik + $nilai->nilai_kerjasama) / 3;
+        // 2. Tentukan Predikat
         $predikat = 'D';
-        if ($avg >= 90) $predikat = 'A';
-        elseif ($avg >= 80) $predikat = 'B';
-        elseif ($avg >= 70) $predikat = 'C';
+        if ($akhir >= 90) $predikat = 'A';
+        elseif ($akhir >= 80) $predikat = 'B';
+        elseif ($akhir >= 70) $predikat = 'C';
+
+        // 3. Hitung Persentase Kehadiran
+        $idPeserta = $row->anggota_eskul->id_peserta;
+        $totalPertemuan = $this->idKegiatanSemester->count();
+        $hadir = 0;
+        $persenHadir = 0;
+
+        if ($totalPertemuan > 0) {
+            $hadir = Absensi::whereIn('id_kegiatan', $this->idKegiatanSemester)
+                ->where('id_peserta', $idPeserta)
+                ->where('status', 'Hadir')
+                ->count();
+            $persenHadir = round(($hadir / $totalPertemuan) * 100);
+        }
 
         return [
-            $no,
-            $nilai->anggota_eskul->peserta->nama_lengkap,
-            $nilai->anggota_eskul->peserta->tingkat_kelas,
-            $nilai->nilai_disiplin,
-            $nilai->nilai_teknik,
-            $nilai->nilai_kerjasama,
-            $predikat, // Kolom Predikat (Hitung otomatis)
-            $nilai->catatan_rapor ?? '-',
+            $row->anggota_eskul->peserta->nama_lengkap,
+            $row->anggota_eskul->peserta->tingkat_kelas,
+            $row->anggota_eskul->peserta->jenis_kelamin,
+            $persenHadir . '%', // Kolom Kehadiran
+            $t,
+            $d,
+            $k,
+            $akhir,
+            $predikat,
+            $row->catatan_rapor ?? '-'
         ];
     }
 
+    /**
+     * Header Kolom
+     */
     public function headings(): array
     {
         return [
-            ['DAFTAR NILAI EKSTRAKURIKULER'],
-            [strtoupper($this->eskulName)],
-            ['TAHUN AJARAN ' . $this->tahunAjaran . ' - SEMESTER ' . strtoupper($this->semester)],
-            [' '],
-            ['NO', 'NAMA SISWA', 'KELAS', 'DISIPLIN', 'TEKNIK', 'KERJASAMA', 'PREDIKAT', 'CATATAN'],
+            ['REKAPITULASI NILAI EKSTRAKURIKULER'],
+            ['Eskul: ' . $this->namaEskul],
+            ['Pembimbing: ' . $this->namaPembimbing],
+            ['Periode: Semester ' . $this->semester . ' ' . $this->tahunAjaran],
+            [''], // Spasi
+            [     // Header Tabel Data
+                'NAMA SISWA',
+                'KELAS',
+                'L/P',
+                'KEHADIRAN',
+                'TEKNIK',
+                'DISIPLIN',
+                'KERJASAMA',
+                'NILAI AKHIR',
+                'PREDIKAT',
+                'CATATAN'
+            ]
         ];
     }
 
+    /**
+     * Styling
+     */
     public function styles(Worksheet $sheet)
     {
         return [
-            // Judul
-            1 => ['font' => ['bold' => true, 'size' => 14], 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]],
-            2 => ['font' => ['bold' => true, 'size' => 12], 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]],
-            3 => ['font' => ['size' => 10], 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]],
+            1 => ['font' => ['bold' => true, 'size' => 14]],
+            2 => ['font' => ['bold' => true, 'size' => 12]],
+            3 => ['font' => ['bold' => true, 'size' => 12]],
+            4 => ['font' => ['bold' => true, 'size' => 12, 'color' => ['rgb' => '547792']]], // Warna biru muda
             
-            // Header Tabel
-            5 => [
+            // Header Tabel (Baris 6)
+            6 => [
                 'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '213448']],
-                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+                'fill' => [
+                    'fillType' => Fill::FILL_SOLID,
+                    'startColor' => ['rgb' => '213448'] // Biru Gelap
+                ],
+                'alignment' => [
+                    'horizontal' => Alignment::HORIZONTAL_CENTER,
+                    'vertical' => Alignment::VERTICAL_CENTER,
+                ],
             ],
         ];
     }
 
+    /**
+     * Event Styling Lanjutan (Border & Zebra)
+     */
     public function registerEvents(): array
     {
         return [
             AfterSheet::class => function(AfterSheet $event) {
                 $sheet = $event->sheet;
-                $lastRow = $sheet->getHighestRow();
-                $lastCol = $sheet->getHighestColumn();
+                $highestRow = $sheet->getHighestRow();
 
-                // Merge Header
-                $sheet->mergeCells('A1:H1');
-                $sheet->mergeCells('A2:H2');
-                $sheet->mergeCells('A3:H3');
+                // Merge Titles
+                $sheet->mergeCells('A1:J1');
+                $sheet->mergeCells('A2:J2');
+                $sheet->mergeCells('A3:J3');
+                $sheet->mergeCells('A4:J4');
 
-                // Border Tabel
-                $styleArray = [
+                // Border Seluruh Tabel
+                $styleBorder = [
                     'borders' => [
-                        'allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']],
+                        'allBorders' => [
+                            'borderStyle' => Border::BORDER_THIN,
+                            'color' => ['argb' => '000000'],
+                        ],
                     ],
-                    'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
                 ];
-                $sheet->getStyle('A5:' . $lastCol . $lastRow)->applyFromArray($styleArray);
+                $sheet->getStyle('A6:J' . $highestRow)->applyFromArray($styleBorder);
 
-                // Center Alignment Kolom Angka & Predikat
-                $sheet->getStyle('A6:A' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); // No
-                $sheet->getStyle('C6:G' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); // Kelas, Nilai, Predikat
-
-                // Conditional Formatting untuk Predikat (Kolom G)
-                for ($row = 6; $row <= $lastRow; $row++) {
-                    $predikat = $sheet->getCell('G' . $row)->getValue();
-                    $color = 'FFFFFF';
-                    if ($predikat === 'A') $color = 'D1FAE5'; // Hijau
-                    elseif ($predikat === 'B') $color = 'DBEAFE'; // Biru
-                    elseif ($predikat === 'C') $color = 'FEF3C7'; // Kuning
-                    elseif ($predikat === 'D') $color = 'FEE2E2'; // Merah
-
-                    $sheet->getStyle('G' . $row)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($color);
-                }
-
-                // Tanda Tangan
-                $footerRow = $lastRow + 3;
-                $sheet->setCellValue('G' . $footerRow, 'Kudus, ' . date('d F Y'));
-                $sheet->mergeCells('G' . $footerRow . ':H' . $footerRow);
+                // Alignment Center untuk Kolom Angka & Status
+                // B: Kelas, C: LP, D: Hadir, E-I: Nilai
+                $sheet->getStyle('B7:I' . $highestRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
                 
-                $sheet->setCellValue('G' . ($footerRow + 1), 'Pembimbing Ekstrakurikuler');
-                $sheet->mergeCells('G' . ($footerRow + 1) . ':H' . ($footerRow + 1));
+                // Wrap Text untuk Catatan (Kolom J)
+                $sheet->getStyle('J7:J' . $highestRow)->getAlignment()->setWrapText(true);
 
-                $sheet->setCellValue('G' . ($footerRow + 5), $this->pembimbingName);
-                $sheet->mergeCells('G' . ($footerRow + 5) . ':H' . ($footerRow + 5));
-                $sheet->getStyle('G' . ($footerRow + 5))->getFont()->setBold(true)->setUnderline(true);
-                $sheet->getStyle('G' . $footerRow . ':H' . ($footerRow + 5))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                // Zebra Striping
+                for ($row = 7; $row <= $highestRow; $row++) {
+                    if ($row % 2 == 0) {
+                        $sheet->getStyle('A' . $row . ':J' . $row)->getFill()
+                            ->setFillType(Fill::FILL_SOLID)
+                            ->getStartColor()->setARGB('F9FAFB');
+                    }
+                }
             },
         ];
     }

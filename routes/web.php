@@ -110,6 +110,7 @@ Route::middleware(['auth:admin,pembimbing'])->group(function () {
     Route::post('/admin/nilai/generate', [NilaiController::class, 'generate'])->name('nilai.generate');
     Route::put('/admin/nilai/update-bulk', [NilaiController::class, 'updateBulk'])->name('nilai.update_bulk');
     Route::get('/admin/nilai/export', [NilaiController::class, 'exportExcel'])->name('nilai.export');
+    Route::post('/admin/nilai/sync-daily', [NilaiController::class, 'syncFromDaily'])->name('nilai.sync');
 });
 
 

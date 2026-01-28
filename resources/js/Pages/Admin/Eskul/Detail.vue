@@ -94,7 +94,7 @@ const openEditInfo = () => {
 
                 <!-- TAB CONTENT -->
                 <div class="min-h-[400px]">
-                    <TabJadwal v-if="activeTab === 'jadwal'" :jadwal="props.eskul.jadwal" :idEskul="props.eskul.id_eskul" />
+                    <TabJadwal v-if="activeTab === 'jadwal'" :jadwal="props.eskul.jadwal" :idEskul="props.eskul.id_eskul" :limitMin="props.eskul.jenjang_kelas_min" :limitMax="props.eskul.jenjang_kelas_max" />
                     
                     <!-- PASSING PROPS allPeserta KE SINI -->
                     <TabAnggota 

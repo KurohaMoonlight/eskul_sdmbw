@@ -4,18 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Models\Nilai;
 use App\Models\AnggotaEskul;
+use App\Models\Eskul;
+use App\Models\NilaiHarian;
+use App\Exports\NilaiExport;
+use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Models\Eskul; // Import Eskul
-use App\Exports\NilaiExport; // Import Export Class
-use Maatwebsite\Excel\Facades\Excel; // Import Excel Facade
 
 class NilaiController extends Controller
 {
-    /**
-     * Generate Nilai Awal (0) untuk semua anggota aktif
-     * Dipanggil saat tombol "Buka Periode Penilaian" diklik
-     */
     public function generate(Request $request)
     {
         $request->validate([
@@ -28,20 +25,16 @@ class NilaiController extends Controller
         $semester = $request->semester;
         $tahunAjaran = $request->tahun_ajaran;
 
-        // Ambil semua anggota aktif di eskul ini pada tahun ajaran tersebut
-        // (Asumsi: anggota_eskul juga punya kolom tahun_ajaran yang cocok, atau kita ambil yang aktif saja)
         $anggotaAktif = AnggotaEskul::where('id_eskul', $idEskul)
             ->where('status_aktif', true)
-            ->where('tahun_ajaran', $tahunAjaran) 
             ->get();
 
         if ($anggotaAktif->isEmpty()) {
-            return back()->withErrors(['message' => 'Tidak ada anggota aktif untuk dinilai pada tahun ajaran ini.']);
+            return back()->withErrors(['message' => 'Gagal: Tidak ditemukan anggota dengan status AKTIF di eskul ini. Silakan cek data anggota.']);
         }
 
         DB::transaction(function () use ($anggotaAktif, $idEskul, $semester, $tahunAjaran) {
             foreach ($anggotaAktif as $anggota) {
-                // Cek apakah nilai sudah ada biar gak duplikat (safety check)
                 $exists = Nilai::where('id_anggota', $anggota->id_anggota)
                     ->where('semester', $semester)
                     ->where('tahun_ajaran', $tahunAjaran)
@@ -65,10 +58,6 @@ class NilaiController extends Controller
         return back()->with('success', 'Periode penilaian berhasil dibuka.');
     }
 
-    /**
-     * Update Nilai secara Massal (Bulk Update)
-     * Dipanggil saat tombol "Simpan Perubahan" diklik
-     */
     public function updateBulk(Request $request)
     {
         $request->validate([
@@ -105,8 +94,7 @@ class NilaiController extends Controller
         $eskul = Eskul::with('pembimbing')->find($request->id_eskul);
         $pembimbingName = $eskul->pembimbing ? $eskul->pembimbing->nama_lengkap : '.........................';
 
-        // Bersihkan nama file dari karakter aneh
-        $cleanSemester = str_replace('/', '-', $request->tahun_ajaran); // 2025/2026 -> 2025-2026
+        $cleanSemester = str_replace('/', '-', $request->tahun_ajaran);
         $fileName = 'Nilai_' . str_replace(' ', '_', $eskul->nama_eskul) . '_' . $cleanSemester . '_' . $request->semester . '.xlsx';
 
         return \Maatwebsite\Excel\Facades\Excel::download(
@@ -119,5 +107,74 @@ class NilaiController extends Controller
             ), 
             $fileName
         );
+    }
+
+    /**
+     * Hitung Rata-rata dari Nilai Harian
+     */
+    public function syncFromDaily(Request $request)
+    {
+        $request->validate([
+            'id_eskul' => 'required|exists:eskul,id_eskul',
+            'semester' => 'required|string',
+            'tahun_ajaran' => 'required|string',
+        ]);
+
+        $idEskul = $request->id_eskul;
+        $semester = $request->semester;
+        $tahunAjaran = $request->tahun_ajaran;
+
+        // Logika Bulan Semester
+        $startMonth = ($semester === 'Ganjil') ? 7 : 1;
+        $endMonth = ($semester === 'Ganjil') ? 12 : 6;
+        
+        $years = explode('/', $tahunAjaran);
+        $startYear = ($semester === 'Ganjil') ? $years[0] : $years[1];
+        
+        // Query Nilai Rapor yang sudah ada
+        $dataNilaiRapor = Nilai::where('id_eskul', $idEskul)
+            ->where('semester', $semester)
+            ->where('tahun_ajaran', $tahunAjaran)
+            ->get();
+
+        if ($dataNilaiRapor->isEmpty()) {
+            return back()->withErrors(['message' => 'Data rapor belum dibuat. Silakan klik "Buka Periode Penilaian" terlebih dahulu.']);
+        }
+
+        DB::transaction(function () use ($dataNilaiRapor, $startYear, $startMonth, $endMonth) {
+            foreach ($dataNilaiRapor as $rapor) {
+                // Cari ID Anggota -> ID Peserta
+                $anggota = AnggotaEskul::find($rapor->id_anggota);
+                if (!$anggota) continue;
+
+                // Cari semua nilai harian peserta ini di rentang waktu semester
+                $nilaiHarian = NilaiHarian::whereHas('absensi', function($q) use ($anggota, $startYear, $startMonth, $endMonth) {
+                    $q->where('id_peserta', $anggota->id_peserta)
+                      ->whereHas('kegiatan', function($k) use ($startYear, $startMonth, $endMonth) {
+                          $k->whereYear('tanggal', $startYear)
+                            ->whereMonth('tanggal', '>=', $startMonth)
+                            ->whereMonth('tanggal', '<=', $endMonth);
+                      });
+                })->get();
+
+                if ($nilaiHarian->count() > 0) {
+                    // Hitung Rata-rata
+                    $avgTeknik = $nilaiHarian->avg('skor_teknik');
+                    $avgDisiplin = $nilaiHarian->avg('skor_disiplin');
+                    $avgKerjasama = $nilaiHarian->avg('skor_kerjasama');
+                    $count = $nilaiHarian->count();
+
+                    // Update Rapor
+                    $rapor->update([
+                        'nilai_teknik' => round($avgTeknik),
+                        'nilai_disiplin' => round($avgDisiplin),
+                        'nilai_kerjasama' => round($avgKerjasama),
+                        'catatan_rapor' => "Nilai dihitung otomatis dari $count pertemuan harian.",
+                    ]);
+                }
+            }
+        });
+
+        return back()->with('success', 'Nilai berhasil disinkronisasi dari data harian.');
     }
 }

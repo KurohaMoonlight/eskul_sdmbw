@@ -20,9 +20,6 @@ use Carbon\Carbon;
 
 class PembimbingController extends Controller
 {
-    /**
-     * Helper: Menentukan Tahun Ajaran & Semester saat ini
-     */
     private function getCurrentSemesterInfo()
     {
         $now = Carbon::now();
@@ -30,11 +27,9 @@ class PembimbingController extends Controller
         $year = $now->year;
 
         if ($month >= 7) {
-            // Juli - Desember: Semester Ganjil, Tahun Ajaran = Tahun Ini / Tahun Depan
             $semester = 'Ganjil';
             $tahunAjaran = $year . '/' . ($year + 1);
         } else {
-            // Januari - Juni: Semester Genap, Tahun Ajaran = Tahun Lalu / Tahun Ini
             $semester = 'Genap';
             $tahunAjaran = ($year - 1) . '/' . $year;
         }
@@ -45,9 +40,6 @@ class PembimbingController extends Controller
         ];
     }
 
-    /**
-     * Menampilkan Dashboard Pembimbing.
-     */
     public function dashboard()
     {
         $idPembimbing = Auth::guard('pembimbing')->id();
@@ -58,64 +50,36 @@ class PembimbingController extends Controller
         ]);
     }
 
-    /**
-     * Menampilkan Detail Eskul (Jadwal, Anggota, & Kegiatan).
-     */
     public function show(Request $request, $id)
     {
         $idPembimbing = Auth::guard('pembimbing')->id();
-
-        // 1. Validasi Kepemilikan Eskul
-        $eskul = Eskul::where('id_eskul', $id)
-                      ->where('id_pembimbing', $idPembimbing)
-                      ->firstOrFail();
-
-        // 2. Data Dasar
+        $eskul = Eskul::where('id_eskul', $id)->where('id_pembimbing', $idPembimbing)->firstOrFail();
+        
         $jadwal = Jadwal::where('id_eskul', $eskul->id_eskul)->get();
-        $anggota = AnggotaEskul::with('peserta')
-                    ->where('id_eskul', $eskul->id_eskul)
-                    ->get();
-        $kegiatan = Kegiatan::where('id_eskul', $eskul->id_eskul)
-                    ->orderBy('tanggal', 'desc')
-                    ->get();
+        $anggota = AnggotaEskul::with('peserta')->where('id_eskul', $eskul->id_eskul)->get();
+        $kegiatan = Kegiatan::where('id_eskul', $eskul->id_eskul)->orderBy('tanggal', 'desc')->get();
 
-        // 3. LOGIKA FILTER LOG ABSENSI (DIPERBAIKI)
+        // --- Filter Log Absensi ---
         $queryLog = Absensi::with(['peserta', 'kegiatan'])
             ->whereHas('kegiatan', function($q) use ($id) {
                 $q->where('id_eskul', $id);
             });
-
-        // Filter: Search Nama Siswa
+        
         if ($request->search) {
             $queryLog->whereHas('peserta', function($q) use ($request) {
                 $q->where('nama_lengkap', 'like', '%' . $request->search . '%');
             });
         }
-
-        // Filter: Status
         if ($request->status) {
             $queryLog->where('status', $request->status);
         }
-
-        // Filter: Rentang Tanggal
         if ($request->start_date && $request->end_date) {
             $queryLog->whereHas('kegiatan', function($q) use ($request) {
                 $q->whereBetween('tanggal', [$request->start_date, $request->end_date]);
             });
         }
 
-        // Clone query untuk statistik (mengambil semua data tanpa limit pagination)
         $allLogs = $queryLog->get(); 
-        
-        // Paginasi Log untuk Tabel (Limit 10)
-        $logs = (clone $queryLog)
-            ->join('kegiatan', 'absensi.id_kegiatan', '=', 'kegiatan.id_kegiatan')
-            ->orderBy('kegiatan.tanggal', 'desc')
-            ->select('absensi.*') // Pastikan select tabel utama agar tidak tertimpa join
-            ->paginate(10)
-            ->withQueryString();
-
-        // Hitung Statistik (DIPERBAIKI)
         $totalData = $allLogs->count();
         $totalHadir = $allLogs->where('status', 'Hadir')->count();
         
@@ -127,13 +91,15 @@ class PembimbingController extends Controller
             'total_alpha'     => $allLogs->where('status', 'Alpha')->count(),
         ];
 
-        // 4. AMBIL DATA PRESTASI
-        $prestasi = Prestasi::with('peserta')
-            ->where('id_eskul', $eskul->id_eskul)
-            ->orderBy('tanggal_lomba', 'desc')
-            ->get();
+        $logs = (clone $queryLog)
+            ->join('kegiatan', 'absensi.id_kegiatan', '=', 'kegiatan.id_kegiatan')
+            ->orderBy('kegiatan.tanggal', 'desc')
+            ->select('absensi.*')
+            ->paginate(10)
+            ->withQueryString();
 
-        // 5. AMBIL DATA NILAI
+        $prestasi = Prestasi::with('peserta')->where('id_eskul', $eskul->id_eskul)->orderBy('tanggal_lomba', 'desc')->get();
+
         $semesterInfo = $this->getCurrentSemesterInfo();
         $idKegiatanSemester = Kegiatan::where('id_eskul', $id)->pluck('id_kegiatan');
 
@@ -157,26 +123,60 @@ class PembimbingController extends Controller
                 return $item;
             });
 
+        // --- FETCH DATA ABSENSI HARI INI (AGAR TIDAK RESET SAAT REFRESH) ---
+        $today = Carbon::today()->format('Y-m-d');
+        // Cari kegiatan hari ini di eskul ini
+        $kegiatanHariIni = Kegiatan::where('id_eskul', $eskul->id_eskul)
+            ->where('tanggal', $today)
+            ->first();
+
+        $existingAbsensi = [];
+        if ($kegiatanHariIni) {
+            // Ambil absensi beserta nilai hariannya
+            $absensis = Absensi::with('nilai_harian')
+                ->where('id_kegiatan', $kegiatanHariIni->id_kegiatan)
+                ->get();
+            
+            // Format data agar mudah dibaca di frontend: { id_peserta: { status, nilai } }
+            $formattedData = [];
+            foreach ($absensis as $ab) {
+                $formattedData[$ab->id_peserta] = [
+                    'status' => $ab->status,
+                    'nilai' => $ab->nilai_harian ? [
+                        'skor_teknik' => $ab->nilai_harian->skor_teknik,
+                        'skor_disiplin' => $ab->nilai_harian->skor_disiplin,
+                        'skor_kerjasama' => $ab->nilai_harian->skor_kerjasama,
+                        'catatan_harian' => $ab->nilai_harian->catatan_harian,
+                    ] : null
+                ];
+            }
+
+            // Distribusikan data ke semua jadwal hari ini 
+            // (Karena struktur DB kita berbasis Tanggal, bukan Jadwal ID spesifik, jadi semua jadwal di hari itu share data yang sama)
+            foreach ($jadwal as $j) {
+                $existingAbsensi[$j->id_jadwal] = $formattedData;
+            }
+        }
+
         return Inertia::render('Pembimbing/EskulCardDetail', [
             'eskul'      => $eskul,
             'jadwal'     => $jadwal,
             'anggota'    => $anggota,
             'kegiatan'   => $kegiatan,
             'logs'       => $logs,
-            'logSummary' => $summary, // Kirim data summary yang sudah dihitung
+            'logSummary' => $summary,
             'filters'    => $request->only(['search', 'start_date', 'end_date', 'status']),
             'prestasi'   => $prestasi,
-            'nilai'      => $nilai, 
+            'nilai'      => $nilai,
             'currentSemesterInfo' => [ 
                 'semester' => $semesterInfo['semester'],
                 'tahun' => $semesterInfo['tahun_ajaran']
-            ]
+            ],
+            'existingAbsensi' => $existingAbsensi // Kirim data ini ke Vue
         ]);
-
     }
-
-    // --- Method CRUD Pembimbing (Sama seperti sebelumnya) ---
-
+    
+    // ... (method store, update, destroy tetap sama) ...
     public function store(Request $request)
     {
         $validated = $request->validate([

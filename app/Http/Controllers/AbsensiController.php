@@ -6,31 +6,30 @@ use App\Models\Absensi;
 use App\Models\Eskul;
 use App\Models\Jadwal;
 use App\Models\Kegiatan;
+use App\Models\NilaiHarian; // Import Model NilaiHarian
+use App\Exports\AbsensiExport;
+use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Exports\AbsensiExport; // Import Export Class
-use Maatwebsite\Excel\Facades\Excel; // Import Facade Excel
 
 class AbsensiController extends Controller
 {
-    /**
-     * Menyimpan data absensi dari BoxAbsensi.vue
-     */
     public function store(Request $request)
     {
-        // ... (Kode store yang sudah ada sebelumnya biarkan tetap sama) ...
         // Validasi Input
         $request->validate([
             'tanggal'      => 'required|date',
             'id_jadwal'    => 'required|exists:jadwal,id_jadwal',
             'data_absensi' => 'required|array', 
+            'data_nilai'   => 'nullable|array', // Validasi data nilai (opsional)
         ]);
 
         $tanggal = $request->tanggal;
         $idJadwal = $request->id_jadwal;
         $dataAbsensi = $request->data_absensi;
+        $dataNilai = $request->data_nilai ?? []; // Default array kosong jika tidak ada
 
-        DB::transaction(function () use ($tanggal, $idJadwal, $dataAbsensi) {
+        DB::transaction(function () use ($tanggal, $idJadwal, $dataAbsensi, $dataNilai) {
             $jadwal = Jadwal::findOrFail($idJadwal);
 
             $kegiatan = Kegiatan::firstOrCreate(
@@ -45,7 +44,8 @@ class AbsensiController extends Controller
             );
 
             foreach ($dataAbsensi as $idPeserta => $status) {
-                Absensi::updateOrCreate(
+                // 1. Simpan Absensi
+                $absensi = Absensi::updateOrCreate(
                     [
                         'id_kegiatan' => $kegiatan->id_kegiatan,
                         'id_peserta'  => $idPeserta,
@@ -54,11 +54,30 @@ class AbsensiController extends Controller
                         'status' => $status
                     ]
                 );
+
+                // 2. Simpan Nilai Harian (Hanya jika status Hadir dan ada data nilai)
+                if ($status === 'Hadir' && isset($dataNilai[$idPeserta])) {
+                    $nilai = $dataNilai[$idPeserta];
+                    
+                    NilaiHarian::updateOrCreate(
+                        ['id_absensi' => $absensi->id_absensi],
+                        [
+                            'skor_teknik' => $nilai['teknik'] ?? 0,
+                            'skor_disiplin' => $nilai['disiplin'] ?? 0,
+                            'skor_kerjasama' => $nilai['kerjasama'] ?? 0,
+                            'catatan_harian' => $nilai['catatan_harian'] ?? null,
+                        ]
+                    );
+                } else {
+                    // Jika tidak hadir, hapus nilai harian jika ada (agar tidak mengganggu rata-rata)
+                    NilaiHarian::where('id_absensi', $absensi->id_absensi)->delete();
+                }
             }
         });
 
-        return back()->with('success', 'Absensi berhasil disimpan.');
+        return back()->with('success', 'Absensi dan Nilai Harian berhasil disimpan.');
     }
+
 
     /**
      * Menampilkan Halaman Cetak Log Absensi

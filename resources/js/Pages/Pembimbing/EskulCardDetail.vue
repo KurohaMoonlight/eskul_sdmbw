@@ -51,7 +51,11 @@ const props = defineProps({
         type: Array,
         default: () => []
     },
-    currentSemesterInfo: Object
+    currentSemesterInfo: Object,
+    existingAbsensi: {
+        type: Object,
+        default: () => ({})
+    }
 });
 
 const calculatedSemesterInfo = computed(() => {
@@ -405,6 +409,7 @@ const openEditPrestasi = (item) => {
                             :jadwal="props.jadwal"
                             :anggota="props.anggota"
                             :selectedDate="selectedDate"
+                            :existingAbsensi="props.existingAbsensi" 
                         />
                     </div>
 
@@ -443,7 +448,16 @@ const openEditPrestasi = (item) => {
             </div>
         </main>
 
-        <ModalFormJadwal :show="showModalJadwal" :jadwalData="null" :idEskul="props.eskul?.id_eskul" @close="showModalJadwal = false" />
+        <ModalFormJadwal 
+            :show="showModalJadwal" 
+            :jadwalData="null" 
+            :idEskul="props.eskul?.id_eskul"
+            
+            :minLimit="props.eskul?.jenjang_kelas_min"
+            :maxLimit="props.eskul?.jenjang_kelas_max"
+            
+            @close="showModalJadwal = false" 
+        />
         <ModalFormAddAnggota 
         :show="showModalAnggota" 
         :idEskul="props.eskul?.id_eskul" 

@@ -11,7 +11,9 @@ const props = defineProps({
     idEskul: {
         type: [Number, String],
         required: true
-    }
+    },
+    limitMin: [Number, String],
+    limitMax: [Number, String]
 });
 
 // State untuk Modal
@@ -174,6 +176,8 @@ const getDayColor = (day) => {
             :show="showModal"
             :jadwalData="selectedJadwal"
             :idEskul="idEskul"
+            :minLimit="limitMin"
+            :maxLimit="limitMax"
             @close="showModal = false"
         />
     </div>

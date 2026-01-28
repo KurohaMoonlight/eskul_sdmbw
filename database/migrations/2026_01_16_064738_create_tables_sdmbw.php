@@ -143,6 +143,25 @@ return new class extends Migration
             $table->foreign('id_eskul')->references('id_eskul')->on('eskul')->onDelete('cascade');
         });
 
+        // database/migrations/xxxx_create_nilai_harian_table.php
+
+        Schema::create('nilai_harian', function (Blueprint $table) {
+            $table->id('id_nilai_harian');
+            // Relasi ke Absensi (Setiap kali absen hadir, bisa dinilai)
+            $table->unsignedBigInteger('id_absensi'); 
+            
+            // Komponen Nilai Harian
+            $table->integer('skor_teknik')->default(0);
+            $table->integer('skor_disiplin')->default(0);
+            $table->integer('skor_kerjasama')->default(0);
+            
+            $table->text('catatan_harian')->nullable();
+            $table->timestamps();
+
+            $table->foreign('id_absensi')->references('id_absensi')->on('absensi')->onDelete('cascade');
+        });
+    
+
         // Tabel Sessions (Bawaan Laravel)
         Schema::create('sessions', function (Blueprint $table) {
             $table->string('id')->primary();
@@ -171,5 +190,6 @@ return new class extends Migration
         Schema::dropIfExists('admin');
         Schema::dropIfExists('pembimbing');
         Schema::dropIfExists('sessions');
+        Schema::dropIfExists('nilai_harian');
     }
 };

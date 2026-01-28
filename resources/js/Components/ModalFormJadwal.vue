@@ -1,11 +1,19 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3';
-import { watch } from 'vue';
+import { watch, computed } from 'vue';
 
 const props = defineProps({
     show: Boolean,
     jadwalData: Object,      // Data edit (null jika tambah baru)
-    idEskul: [Number, String] // ID Eskul (Wajib untuk tambah baru)
+    idEskul: [Number, String], // ID Eskul (Wajib untuk tambah baru)
+    minLimit: {
+        type: [Number, String],
+        default: '1'
+    },
+    maxLimit: {
+        type: [Number, String],
+        default: '6'
+    }
 });
 
 const emit = defineEmits(['close']);
@@ -24,15 +32,26 @@ const form = useForm({
 });
 
 // Watcher: Reset/Isi form saat modal dibuka
+const classOptions = computed(() => {
+    const start = parseInt(props.minLimit);
+    const end = parseInt(props.maxLimit);
+    const options = [];
+    
+    // Generate angka dari min sampai max
+    for (let i = start; i <= end; i++) {
+        options.push(String(i));
+    }
+    return options;
+});
+
+// Watcher: Reset/Isi form saat modal dibuka
 watch(() => props.show, (isOpen) => {
     if (isOpen) {
-        // Clear errors saat modal dibuka
         form.clearErrors();
 
         if (props.jadwalData) {
-            // Mode Edit
+            // ... mode edit (sama seperti sebelumnya) ...
             form.id_eskul = props.jadwalData.id_eskul;
-            // Bungkus string hari dari DB ke array agar checklist terbaca
             form.hari = [props.jadwalData.hari]; 
             form.jam_mulai = props.jadwalData.jam_mulai;
             form.jam_selesai = props.jadwalData.jam_selesai;
@@ -42,11 +61,12 @@ watch(() => props.show, (isOpen) => {
         } else {
             // Mode Tambah
             form.reset();
-            // PASTIKAN ID ESKUL TERISI DI SINI
             form.id_eskul = props.idEskul; 
             form.hari = [];
-            form.kelas_min = '1';
-            form.kelas_max = '6';
+            
+            // SET DEFAULT FORM SESUAI LIMIT ESKUL
+            form.kelas_min = String(props.minLimit); 
+            form.kelas_max = String(props.maxLimit);
         }
     }
 });
@@ -168,7 +188,7 @@ const submit = () => {
                                 v-model="form.kelas_min"
                                 class="w-full rounded-lg border border-[#94B4C1] bg-white p-2.5 text-[#213448] focus:border-[#213448] focus:outline-none focus:ring-2 focus:ring-[#547792]/20"
                             >
-                                <option v-for="i in 6" :key="i" :value="String(i)">Kelas {{ i }}</option>
+                                <option v-for="k in classOptions" :key="k" :value="k">Kelas {{ k }}</option>
                             </select>
                         </div>
                         <div class="space-y-2">
@@ -177,7 +197,7 @@ const submit = () => {
                                 v-model="form.kelas_max"
                                 class="w-full rounded-lg border border-[#94B4C1] bg-white p-2.5 text-[#213448] focus:border-[#213448] focus:outline-none focus:ring-2 focus:ring-[#547792]/20"
                             >
-                                <option v-for="i in 6" :key="i" :value="String(i)">Kelas {{ i }}</option>
+                                <option v-for="k in classOptions" :key="k" :value="k">Kelas {{ k }}</option>
                             </select>
                         </div>
                     </div>

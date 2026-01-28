@@ -8,10 +8,9 @@ const props = defineProps({
         type: Object,
         default: () => ({ data: [], links: [] }) 
     },
-    // Data Rekap - Pastikan nama prop ini sesuai dengan yang dikirim dari parent (:summary="logSummary")
+    // Data Rekap
     summary: {
         type: Object,
-        // Default value jika data belum tersedia
         default: () => ({
             total_pertemuan: 0,
             avg_kehadiran: 0, 
@@ -22,17 +21,15 @@ const props = defineProps({
     },
     filters: {
         type: Object,
-        default: () => ({ search: '', start_date: '', end_date: '', status: '' })
+        default: () => ({ search: '', start_date: '', end_date: '', status: '', score_mode: '' })
     },
     idEskul: [Number, String]
 });
 
-// Computed safe summary untuk menangani jika props.summary null/undefined
-// Gunakan 's' ini di template daripada props.summary langsung
+// Computed safe summary
 const s = computed(() => {
     return {
         total_pertemuan: props.summary?.total_pertemuan ?? 0,
-        // Pastikan konversi ke Number agar tidak error saat render grafik
         avg_kehadiran: Number(props.summary?.avg_kehadiran ?? 0),
         total_sakit: props.summary?.total_sakit ?? 0,
         total_izin: props.summary?.total_izin ?? 0,
@@ -45,6 +42,7 @@ const search = ref(props.filters.search || '');
 const startDate = ref(props.filters.start_date || '');
 const endDate = ref(props.filters.end_date || '');
 const statusFilter = ref(props.filters.status || '');
+const scoreFilter = ref(props.filters.score_mode || ''); // Filter Nilai Baru
 
 const applyFilter = debounce(() => {
     router.get(
@@ -54,29 +52,27 @@ const applyFilter = debounce(() => {
             start_date: startDate.value,
             end_date: endDate.value,
             status: statusFilter.value,
-            // Mode khusus untuk memberitahu controller ini request log filter (opsional, tergantung implementasi controller)
+            score_mode: scoreFilter.value, // Kirim parameter filter nilai
             mode: 'log_filter' 
         },
         { 
             preserveState: true, 
             preserveScroll: true, 
-            // PENTING: Gunakan 'logSummary' jika itu nama variabel yang dikirim dari Controller/Parent ke Inertia
-            // Namun, karena di parent kita mem-passnya ke prop 'summary', saat partial reload 
-            // kita harus me-reload data parent ('logSummary') agar prop 'summary' anak ikut terupdate.
             only: ['logs', 'logSummary', 'filters'] 
         }
     );
 }, 500);
 
-watch(search, applyFilter);
-watch(statusFilter, applyFilter);
-watch([startDate, endDate], applyFilter);
+// Watcher untuk semua filter
+watch([search, statusFilter, startDate, endDate, scoreFilter], applyFilter);
 
 const printLog = () => {
     const params = new URLSearchParams({
         start_date: startDate.value,
         end_date: endDate.value,
-        id_eskul: props.idEskul
+        id_eskul: props.idEskul,
+        status: statusFilter.value,
+        score_mode: scoreFilter.value
     }).toString();
     
     window.open(`/admin/absensi/print?${params}`, '_blank');
@@ -97,21 +93,16 @@ const getStatusBadge = (status) => {
     <div class="space-y-6">
         
         <!-- 1. REKAPITULASI CEPAT (STAT CARDS) -->
-        <!-- Debugging: Tampilkan raw data jika masih error -->
-        <!-- <pre>{{ props.summary }}</pre> -->
-
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
             <!-- Card 1: Total Pertemuan -->
             <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-center items-center text-center">
                 <span class="text-xs text-gray-400 font-bold uppercase tracking-wider">Total Pertemuan</span>
-                <!-- Gunakan s.total_pertemuan -->
                 <span class="text-2xl font-bold text-[#213448] mt-1">{{ s.total_pertemuan }}</span>
                 <span class="text-[10px] text-gray-400">Sesi terlaksana</span>
             </div>
 
             <!-- Card 2: Rata-rata Kehadiran -->
             <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-center items-center text-center relative overflow-hidden">
-                <!-- Bar Indikator di Bawah -->
                 <div class="absolute bottom-0 left-0 h-1.5 bg-gray-100 w-full">
                     <div class="h-full bg-emerald-500 transition-all duration-500" :style="{ width: s.avg_kehadiran + '%' }"></div>
                 </div>
@@ -149,7 +140,7 @@ const getStatusBadge = (status) => {
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-[#94B4C1]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>
-                    <h3 class="font-bold text-lg">Riwayat Absensi</h3>
+                    <h3 class="font-bold text-lg">Riwayat Absensi & Nilai</h3>
                 </div>
 
                 <!-- Action Tools -->
@@ -188,6 +179,14 @@ const getStatusBadge = (status) => {
                         <option value="Izin" class="text-gray-800">Izin</option>
                         <option value="Alpha" class="text-gray-800">Alpha</option>
                     </select>
+
+                    <!-- NEW: Score Filter (FILTER NILAI BARU) -->
+                    <select v-model="scoreFilter" class="py-1.5 px-2 text-sm rounded-lg border-none bg-white/10 text-white focus:ring-2 focus:ring-[#547792]">
+                        <option value="" class="text-gray-800">Filter Nilai</option>
+                        <option value="highest" class="text-gray-800">Tertinggi</option>
+                        <option value="lowest" class="text-gray-800">Terendah</option>
+                        <option value="under_70" class="text-gray-800">Di Bawah 70</option>
+                    </select>
                 </div>
             </div>
 
@@ -199,13 +198,19 @@ const getStatusBadge = (status) => {
                             <th class="px-6 py-3 border-b border-gray-100">Tanggal & Sesi</th>
                             <th class="px-6 py-3 border-b border-gray-100">Siswa</th>
                             <th class="px-6 py-3 border-b border-gray-100">Status</th>
+                            <!-- Kolom Nilai Baru -->
+                            <th class="px-2 py-3 border-b border-gray-100 text-center" title="Teknik">Tek</th>
+                            <th class="px-2 py-3 border-b border-gray-100 text-center" title="Disiplin">Dis</th>
+                            <th class="px-2 py-3 border-b border-gray-100 text-center" title="Kerjasama">Ker</th>
+                            <th class="px-6 py-3 border-b border-gray-100">Catatan Harian</th>
+                            <!-- End Kolom Nilai -->
                             <th class="px-6 py-3 border-b border-gray-100">Materi Kegiatan</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
                         <tr v-if="logs.data.length === 0">
-                            <td colspan="4" class="px-6 py-8 text-center text-gray-400 italic text-sm">
-                                Tidak ada data absensi ditemukan.
+                            <td colspan="8" class="px-6 py-8 text-center text-gray-400 italic text-sm">
+                                Tidak ada data absensi/nilai ditemukan.
                             </td>
                         </tr>
                         
@@ -234,8 +239,25 @@ const getStatusBadge = (status) => {
                                     {{ log.status }}
                                 </span>
                             </td>
+
+                            <!-- Menampilkan Nilai (Read Only) -->
+                            <td class="px-2 py-3 text-center text-sm text-gray-700 font-medium">
+                                {{ log.nilai_harian?.skor_teknik ?? '-' }}
+                            </td>
+                            <td class="px-2 py-3 text-center text-sm text-gray-700 font-medium">
+                                {{ log.nilai_harian?.skor_disiplin ?? '-' }}
+                            </td>
+                            <td class="px-2 py-3 text-center text-sm text-gray-700 font-medium">
+                                {{ log.nilai_harian?.skor_kerjasama ?? '-' }}
+                            </td>
                             <td class="px-6 py-3">
-                                <p class="text-xs text-gray-600 line-clamp-1 max-w-[200px]">
+                                <p class="text-xs text-gray-500 italic max-w-[150px] truncate" :title="log.nilai_harian?.catatan_harian">
+                                    {{ log.nilai_harian?.catatan_harian || '-' }}
+                                </p>
+                            </td>
+
+                            <td class="px-6 py-3">
+                                <p class="text-xs text-gray-600 line-clamp-1 max-w-[200px]" :title="log.kegiatan?.materi_kegiatan">
                                     {{ log.kegiatan?.materi_kegiatan || '-' }}
                                 </p>
                             </td>

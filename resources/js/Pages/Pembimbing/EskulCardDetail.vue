@@ -232,7 +232,9 @@ const openEditPrestasi = (item) => {
     <Head :title="`Detail ${props.eskul?.nama_eskul || 'Eskul'}`" />
 
     <div class="min-h-screen bg-gray-50/50">
-        <Navbar />
+        <Navbar>
+            
+        </Navbar>
 
         <main class="py-10">
             <div class="w-full px-6 md:px-8">

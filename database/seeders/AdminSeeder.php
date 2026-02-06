@@ -12,7 +12,7 @@ class AdminSeeder extends Seeder
     {
         Admin::create([
             'username'     => 'admin',
-            'password'     => Hash::make('admin123'), // Ganti dengan password yang diinginkan
+            'password'     => Hash::make('7rD7N1£Rx,Am@!u{lol_56s{6k)$|#Swh0;H!KV&'), // Ganti dengan password yang diinginkan
         ]);
     }
 }

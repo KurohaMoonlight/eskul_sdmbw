@@ -7,11 +7,13 @@ use App\Http\Controllers\EskulController;
 use App\Http\Controllers\JadwalController;
 use App\Http\Controllers\AnggotaController;
 use App\Http\Controllers\KegiatanController;
-use App\Http\Controllers\AbsensiController; // Import AbsensiController
-use App\Http\Controllers\PrestasiController; // <--- PASTIKAN INI ADA
-use App\Http\Controllers\NilaiController; // Tambahkan Import Controller Baru
+use App\Http\Controllers\AbsensiController; 
+use App\Http\Controllers\PrestasiController; 
+use App\Http\Controllers\NilaiController; 
 use App\Models\Pembimbing;
 use App\Models\Eskul;
+use App\Models\Prestasi; // Tambahkan Model
+use App\Models\Peserta;  // Tambahkan Model
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 
@@ -100,9 +102,32 @@ Route::middleware(['auth:admin,pembimbing'])->group(function () {
     Route::post('/admin/nilai/sync-daily', [NilaiController::class, 'syncFromDaily'])->name('nilai.sync');
 });
 
-// 5. Redirect root '/'
+// 5. Root URL (Landing Page)
 Route::get('/', function () {
-    if (Auth::guard('admin')->check()) return redirect()->route('admin.dashboard');
-    if (Auth::guard('pembimbing')->check()) return redirect()->route('pembimbing.dashboard');
-    return redirect()->route('login');
-});
+    // Jika sudah login, redirect ke dashboard masing-masing
+    if (Auth::guard('admin')->check()) {
+        return redirect()->route('admin.dashboard');
+    }
+    if (Auth::guard('pembimbing')->check()) {
+        return redirect()->route('pembimbing.dashboard');
+    }
+
+    // Ambil Data untuk Landing Page (Publik)
+    // 1. Prestasi Terbaru (Limit 6)
+    $prestasiList = Prestasi::with('peserta')
+        ->orderBy('tanggal_lomba', 'desc')
+        ->take(6)
+        ->get();
+
+    // 2. Statistik Singkat
+    $totalEskul = Eskul::count();
+    $totalSiswa = Peserta::count(); 
+    $totalPrestasi = Prestasi::count();
+
+    return Inertia::render('LandingPage', [
+        'prestasiList' => $prestasiList,
+        'totalEskul' => $totalEskul,
+        'totalSiswa' => $totalSiswa,
+        'totalPrestasi' => $totalPrestasi
+    ]);
+})->name('landing');

@@ -15,11 +15,13 @@ class Kegiatan extends Model
     protected $fillable = [
         'id_eskul',
         'tanggal',
+        'jam_mulai',   // <--- TAMBAHKAN INI
+        'jam_selesai', // <--- TAMBAHKAN INI
         'materi_kegiatan',
         'catatan_pembimbing',
     ];
 
-    public $timestamps = false; // Sesuaikan jika tabel tidak punya timestamps (created_at, updated_at)
+    public $timestamps = false;
 
     public function eskul()
     {

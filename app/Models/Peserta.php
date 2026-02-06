@@ -11,7 +11,6 @@ class Peserta extends Model
 
     protected $table = 'peserta';
     protected $primaryKey = 'id_peserta';
-    public $timestamps = false;
 
     // Menambahkan kolom yang diizinkan untuk Mass Assignment
     protected $fillable = [

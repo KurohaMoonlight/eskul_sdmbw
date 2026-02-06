@@ -3,7 +3,7 @@
 namespace App\Exports;
 
 use App\Models\Absensi;
-use App\Models\Eskul; // Tambahkan Model Eskul
+use App\Models\Eskul;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
@@ -11,6 +11,7 @@ use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Concerns\WithCustomStartCell;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -18,12 +19,12 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use Carbon\Carbon;
 
-class AbsensiExport implements FromCollection, WithHeadings, WithMapping, WithStyles, ShouldAutoSize, WithEvents
+class AbsensiExport implements FromCollection, WithHeadings, WithMapping, WithStyles, ShouldAutoSize, WithEvents, WithCustomStartCell
 {
     protected $idEskul;
     protected $filters;
     protected $namaEskul;
-    protected $namaPembimbing; // Properti baru untuk nama pembimbing
+    protected $namaPembimbing;
 
     public function __construct($idEskul, $filters, $namaEskul)
     {
@@ -31,23 +32,28 @@ class AbsensiExport implements FromCollection, WithHeadings, WithMapping, WithSt
         $this->filters = $filters;
         $this->namaEskul = $namaEskul;
         
-        // Ambil data Pembimbing berdasarkan ID Eskul
-        $eskul = Eskul::with('pembimbing')->find($idEskul);
-        $this->namaPembimbing = $eskul->pembimbing ? $eskul->pembimbing->nama_lengkap : '-';
+        // FIX: Gunakan relasi 'pembimbings'
+        $eskul = Eskul::with('pembimbings')->find($idEskul);
+        
+        if ($eskul && $eskul->pembimbings->count() > 0) {
+            $this->namaPembimbing = $eskul->pembimbings->pluck('nama_lengkap')->join(', ');
+        } else {
+            $this->namaPembimbing = '-';
+        }
     }
 
-    /**
-    * @return \Illuminate\Support\Collection
-    */
+    public function startCell(): string
+    {
+        return 'A2';
+    }
+
     public function collection()
     {
-        // 1. Base Query dengan Eager Loading
         $queryLog = Absensi::with(['peserta', 'kegiatan', 'nilai_harian'])
             ->whereHas('kegiatan', function($q) {
                 $q->where('id_eskul', $this->idEskul);
             });
 
-        // 2. Filter Search Nama
         if (!empty($this->filters['search'])) {
             $search = $this->filters['search'];
             $queryLog->whereHas('peserta', function($q) use ($search) {
@@ -55,12 +61,10 @@ class AbsensiExport implements FromCollection, WithHeadings, WithMapping, WithSt
             });
         }
 
-        // 3. Filter Status
         if (!empty($this->filters['status'])) {
             $queryLog->where('status', $this->filters['status']);
         }
 
-        // 4. Filter Tanggal
         if (!empty($this->filters['start_date']) && !empty($this->filters['end_date'])) {
             $startDate = $this->filters['start_date'];
             $endDate = $this->filters['end_date'];
@@ -69,7 +73,6 @@ class AbsensiExport implements FromCollection, WithHeadings, WithMapping, WithSt
             });
         }
 
-        // 5. Filter & Sorting Score Mode
         if (!empty($this->filters['score_mode'])) {
             $scoreMode = $this->filters['score_mode'];
             
@@ -89,7 +92,6 @@ class AbsensiExport implements FromCollection, WithHeadings, WithMapping, WithSt
                          ->orderByRaw("$rawAvgScore ASC");
             }
         } else {
-            // Default Sorting
             $queryLog->join('kegiatan', 'absensi.id_kegiatan', '=', 'kegiatan.id_kegiatan')
                      ->select('absensi.*')
                      ->orderBy('kegiatan.tanggal', 'desc');
@@ -98,9 +100,6 @@ class AbsensiExport implements FromCollection, WithHeadings, WithMapping, WithSt
         return $queryLog->get();
     }
 
-    /**
-     * Mapping data per baris
-     */
     public function map($row): array
     {
         $teknik = $row->nilai_harian->skor_teknik ?? 0;
@@ -128,17 +127,15 @@ class AbsensiExport implements FromCollection, WithHeadings, WithMapping, WithSt
         ];
     }
 
-    /**
-     * Header Kolom
-     */
     public function headings(): array
     {
         return [
             ['LAPORAN ABSENSI & NILAI HARIAN EKSTRAKURIKULER'],
-            ['Eskul: ' . $this->namaEskul],
-            ['Pembimbing: ' . $this->namaPembimbing], // Tambahan Nama Pembimbing
-            ['Dicetak Pada: ' . Carbon::now()->translatedFormat('d F Y H:i')],
-            [''], 
+            [''],
+            ['Nama Ekstrakurikuler', ': ' . $this->namaEskul],
+            ['Nama Pembimbing', ': ' . $this->namaPembimbing],
+            ['Tanggal Cetak', ': ' . Carbon::now()->translatedFormat('d F Y, H:i') . ' WIB'],
+            [''],
             [     
                 'TANGGAL',
                 'NAMA SISWA',
@@ -154,75 +151,79 @@ class AbsensiExport implements FromCollection, WithHeadings, WithMapping, WithSt
         ];
     }
 
-    /**
-     * Styling Dasar
-     */
     public function styles(Worksheet $sheet)
     {
         return [
-            1 => ['font' => ['bold' => true, 'size' => 14]],
-            2 => ['font' => ['bold' => true, 'size' => 12]],
-            3 => ['font' => ['bold' => true, 'size' => 12]],
-            4 => ['font' => ['italic' => true, 'size' => 10]],
+            2 => [
+                'font' => ['bold' => true, 'size' => 16, 'name' => 'Calibri', 'color' => ['rgb' => '213448']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]
+            ],
+            4 => ['font' => ['bold' => true, 'name' => 'Calibri']],
+            5 => ['font' => ['bold' => true, 'name' => 'Calibri']],
+            6 => ['font' => ['bold' => true, 'name' => 'Calibri']],
             
-            // Header Tabel (Sekarang di baris 6)
-            6 => [
-                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            8 => [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'name' => 'Calibri'],
                 'fill' => [
                     'fillType' => Fill::FILL_SOLID,
-                    'startColor' => ['rgb' => '213448'] // Warna Header Biru Gelap
+                    'startColor' => ['rgb' => '213448']
                 ],
                 'alignment' => [
                     'horizontal' => Alignment::HORIZONTAL_CENTER,
                     'vertical' => Alignment::VERTICAL_CENTER,
                 ],
+                'borders' => [
+                    'allBorders' => ['borderStyle' => Border::BORDER_THIN]
+                ]
             ],
         ];
     }
 
-    /**
-     * Event untuk styling lanjutan
-     */
     public function registerEvents(): array
     {
         return [
             AfterSheet::class => function(AfterSheet $event) {
                 $sheet = $event->sheet;
                 $highestRow = $sheet->getHighestRow();
+                $highestCol = 'J'; 
 
-                // Merge Title Cells
-                $sheet->mergeCells('A1:J1');
-                $sheet->mergeCells('A2:J2');
-                $sheet->mergeCells('A3:J3');
-                $sheet->mergeCells('A4:J4');
-
-                // Alignment Left untuk Informasi Header
-                $sheet->getStyle('A1:A4')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
-
-                // Styling Tabel Data (Border & Zebra Striping)
-                $styleBorder = [
+                $sheet->mergeCells("A2:{$highestCol}2");
+                $sheet->getColumnDimension('A')->setWidth(20); 
+                
+                $styleThickBorder = [
                     'borders' => [
-                        'allBorders' => [
-                            'borderStyle' => Border::BORDER_THIN,
-                            'color' => ['argb' => '000000'],
+                        'outline' => [
+                            'borderStyle' => Border::BORDER_THICK,
+                            'color' => ['argb' => '213448'],
                         ],
                     ],
                 ];
-                
-                // Terapkan border dari header tabel (A6) sampai bawah
-                $sheet->getStyle('A6:J' . $highestRow)->applyFromArray($styleBorder);
-                
-                // Alignment Data Tabel
-                $sheet->getStyle('A7:A' . $highestRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); // Tanggal
-                $sheet->getStyle('C7:H' . $highestRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); // Kelas, Status, Nilai
-                $sheet->getStyle('I7:J' . $highestRow)->getAlignment()->setWrapText(true); // Catatan & Materi
+                $sheet->getStyle("A8:{$highestCol}{$highestRow}")->applyFromArray($styleThickBorder);
 
-                // Tambahkan Zebra Striping (Warna selang-seling) untuk baris data
-                for ($row = 7; $row <= $highestRow; $row++) {
-                    if ($row % 2 == 0) { // Baris Genap
-                        $sheet->getStyle('A' . $row . ':J' . $row)->getFill()
+                $styleThinBorder = [
+                    'borders' => [
+                        'allBorders' => [
+                            'borderStyle' => Border::BORDER_THIN,
+                            'color' => ['argb' => 'CCCCCC'], 
+                        ],
+                    ],
+                ];
+                $sheet->getStyle("A9:{$highestCol}{$highestRow}")->applyFromArray($styleThinBorder);
+
+                $sheet->getStyle("A9:{$highestCol}{$highestRow}")->getFont()->setName('Calibri');
+                $sheet->getStyle("A9:{$highestCol}{$highestRow}")->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+                
+                $sheet->getStyle("A9:A{$highestRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle("C9:H{$highestRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                
+                $sheet->getStyle("B9:B{$highestRow}")->getAlignment()->setWrapText(true);
+                $sheet->getStyle("I9:J{$highestRow}")->getAlignment()->setWrapText(true);
+
+                for ($row = 9; $row <= $highestRow; $row++) {
+                    if ($row % 2 != 0) { 
+                        $sheet->getStyle("A{$row}:{$highestCol}{$row}")->getFill()
                             ->setFillType(Fill::FILL_SOLID)
-                            ->getStartColor()->setARGB('F9FAFB'); // Abu-abu sangat muda (cool gray 50)
+                            ->getStartColor()->setARGB('F3F4F6'); 
                     }
                 }
             },

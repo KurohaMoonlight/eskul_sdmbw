@@ -30,12 +30,10 @@ const colors = [
 ];
 
 // Menentukan warna berdasarkan ID Eskul.
-// Menggunakan modulo (%) agar warnanya konsisten (tidak berubah-ubah saat refresh), tapi tetap terlihat acak antar item.
 const accentColor = computed(() => {
     if (props.eskul.id_eskul) {
         return colors[props.eskul.id_eskul % colors.length];
     }
-    // Fallback random murni jika tidak ada ID
     return colors[Math.floor(Math.random() * colors.length)];
 });
 </script>
@@ -68,8 +66,13 @@ const accentColor = computed(() => {
             <!-- Pembimbing -->
             <div class="mb-2 text-sm text-[#547792]">
                 <span class="font-semibold text-[#213448]">Pembimbing:</span> 
-                <!-- Menampilkan Nama jika ada relasi, atau ID jika raw data -->
-                {{ eskul.pembimbing ? eskul.pembimbing.nama_lengkap : (eskul.id_pembimbing || '-') }}
+                <!-- Menampilkan Multi Pembimbing (Array) atau Single (Fallback) -->
+                <span class="line-clamp-1">
+                    {{ eskul.pembimbings && eskul.pembimbings.length > 0 
+                        ? eskul.pembimbings.map(p => p.nama_lengkap).join(', ') 
+                        : (eskul.pembimbing ? eskul.pembimbing.nama_lengkap : '-') 
+                    }}
+                </span>
             </div>
 
             <!-- Deskripsi (Terpotong / Line Clamp) -->

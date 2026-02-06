@@ -39,18 +39,32 @@ return new class extends Migration
         });
 
         // 4. Tabel Eskul
-        Schema::create('eskul', function (Blueprint $table) {
-            $table->id('id_eskul');
+            Schema::create('eskul', function (Blueprint $table) {
+            $table->id('id_eskul'); // Primary Key
             $table->string('nama_eskul', 50);
-            $table->unsignedBigInteger('id_pembimbing')->nullable();
             $table->text('deskripsi')->nullable();
             $table->enum('jenjang_kelas_min', ['1', '2', '3', '4', '5', '6'])->nullable();
             $table->enum('jenjang_kelas_max', ['1', '2', '3', '4', '5', '6'])->nullable();
             $table->timestamps();
+        });
 
-            $table->foreign('id_pembimbing')
-                ->references('id_pembimbing')->on('pembimbing')
-                ->onDelete('set null');
+
+        Schema::create('eskul_pembimbing', function (Blueprint $table) {
+            $table->id();
+            
+            // Relasi ke Eskul
+            $table->foreignId('id_eskul')
+                  ->constrained('eskul', 'id_eskul')
+                  ->onDelete('cascade');
+            
+            // Relasi ke Pembimbing
+            // Pastikan tabel 'pembimbing' sudah dibuat di migration sebelumnya
+            $table->foreignId('id_pembimbing')
+                  ->constrained('pembimbing', 'id_pembimbing') 
+                  ->onDelete('cascade');
+
+            // Mencegah duplikasi data ganda (Eskul A tidak bisa punya Pembimbing B dua kali)
+            $table->unique(['id_eskul', 'id_pembimbing']);
         });
 
         // 5. Tabel Anggota Eskul (Pivot Peserta <-> Eskul)

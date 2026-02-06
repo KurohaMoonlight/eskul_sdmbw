@@ -91,19 +91,20 @@ class NilaiController extends Controller
             'tahun_ajaran' => 'required|string',
         ]);
 
-        $eskul = Eskul::with('pembimbing')->find($request->id_eskul);
-        $pembimbingName = $eskul->pembimbing ? $eskul->pembimbing->nama_lengkap : '.........................';
-
+        // PERBAIKAN: Hapus with('pembimbing') karena relasi itu sudah tidak ada.
+        // Kita hanya butuh nama eskul untuk nama file.
+        $eskul = Eskul::find($request->id_eskul);
+        
         $cleanSemester = str_replace('/', '-', $request->tahun_ajaran);
         $fileName = 'Nilai_' . str_replace(' ', '_', $eskul->nama_eskul) . '_' . $cleanSemester . '_' . $request->semester . '.xlsx';
 
+        // PERBAIKAN: Sesuaikan argumen dengan constructor NilaiExport (hanya 3 parameter)
+        // Data nama eskul dan pembimbing sudah diambil di dalam NilaiExport.php
         return \Maatwebsite\Excel\Facades\Excel::download(
             new NilaiExport(
                 $request->id_eskul, 
                 $request->semester, 
-                $request->tahun_ajaran, 
-                $eskul->nama_eskul, 
-                $pembimbingName
+                $request->tahun_ajaran
             ), 
             $fileName
         );

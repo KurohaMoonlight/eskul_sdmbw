@@ -15,6 +15,8 @@ class KegiatanController extends Controller
         $validated = $request->validate([
             'id_eskul'           => 'required|exists:eskul,id_eskul',
             'tanggal'            => 'required|date',
+            'jam_mulai'          => 'nullable|date_format:H:i', // Validasi jam
+            'jam_selesai'        => 'nullable|date_format:H:i|after:jam_mulai',
             'materi_kegiatan'    => 'required|string',
             'catatan_pembimbing' => 'nullable|string',
         ]);
@@ -33,6 +35,8 @@ class KegiatanController extends Controller
 
         $validated = $request->validate([
             'tanggal'            => 'required|date',
+            'jam_mulai'          => 'nullable|date_format:H:i',
+            'jam_selesai'        => 'nullable|date_format:H:i|after:jam_mulai',
             'materi_kegiatan'    => 'required|string',
             'catatan_pembimbing' => 'nullable|string',
         ]);

@@ -23,10 +23,10 @@ const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 
 const form = useForm({
     id_eskul: '',
-    hari: 'Senin', // Default string, bukan array
+    hari: [], // Default string, bukan array
     jam_mulai: '',
     jam_selesai: '',
-    tempat: '', // Ganti lokasi jadi tempat sesuai DB
+    lokasi: '', // Ganti lokasi jadi tempat sesuai DB
     kelas_min: '',
     kelas_max: '',
 });
@@ -53,7 +53,7 @@ watch(() => props.show, (isOpen) => {
             form.hari = props.jadwalData.hari;
             form.jam_mulai = props.jadwalData.jam_mulai;
             form.jam_selesai = props.jadwalData.jam_selesai;
-            form.tempat = props.jadwalData.tempat;
+            form.lokasi = props.jadwalData.lokasi;
             
             // Validasi: Jika data lama diluar range baru, sesuaikan ke min/max range
             const currentMin = String(props.jadwalData.kelas_min);
@@ -89,7 +89,11 @@ const submit = () => {
     const url = props.jadwalData ? `/admin/jadwal/${props.jadwalData.id_jadwal}` : '/admin/jadwal';
     const method = props.jadwalData ? 'put' : 'post';
 
-    form[method](url, {
+    // PERBAIKAN: Gunakan transform untuk mengubah string menjadi array khusus saat pengiriman
+    form.transform((data) => ({
+        ...data,
+        hari: [data.hari] // Bungkus string 'Senin' menjadi ['Senin'] agar diterima Controller
+    }))[method](url, {
         onSuccess: () => {
             form.reset();
             emit('close');
@@ -156,7 +160,7 @@ const submit = () => {
                 <div class="space-y-1">
                     <label class="block text-sm font-bold text-[#213448]">Tempat / Lokasi</label>
                     <input 
-                        v-model="form.tempat" 
+                        v-model="form.lokasi" 
                         type="text" 
                         placeholder="Contoh: Lapangan A, Ruang Musik..." 
                         class="w-full rounded-lg border border-[#94B4C1] p-2.5 focus:border-[#213448] focus:ring-1 focus:ring-[#213448] outline-none transition"

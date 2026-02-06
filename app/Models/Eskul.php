@@ -14,25 +14,28 @@ class Eskul extends Model
 
     protected $fillable = [
         'nama_eskul',
-        'id_pembimbing',
+        // 'id_pembimbing', // HAPUS INI karena kolomnya sudah hilang
         'deskripsi',
         'jenjang_kelas_min',
         'jenjang_kelas_max',
     ];
 
-    public function pembimbing()
+    /**
+     * Relasi Many-to-Many ke Pembimbing
+     * Menggunakan tabel pivot 'eskul_pembimbing'
+     */
+    public function pembimbings()
     {
-        return $this->belongsTo(Pembimbing::class, 'id_pembimbing', 'id_pembimbing');
+        return $this->belongsToMany(Pembimbing::class, 'eskul_pembimbing', 'id_eskul', 'id_pembimbing');
     }
 
     public function jadwal()
     {
-        return $this->hasMany(Jadwal::class, 'id_eskul', 'id_eskul');
+        return $this->hasMany(Jadwal::class, 'id_eskul');
     }
 
-    // Relasi ke AnggotaEskul
     public function anggota_eskul()
     {
-        return $this->hasMany(AnggotaEskul::class, 'id_eskul', 'id_eskul');
+        return $this->hasMany(AnggotaEskul::class, 'id_eskul');
     }
 }

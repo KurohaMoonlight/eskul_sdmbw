@@ -6,7 +6,7 @@ use App\Models\Absensi;
 use App\Models\Eskul;
 use App\Models\Jadwal;
 use App\Models\Kegiatan;
-use App\Models\NilaiHarian; // Import Model NilaiHarian
+use App\Models\NilaiHarian;
 use App\Exports\AbsensiExport;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Http\Request;
@@ -16,29 +16,32 @@ class AbsensiController extends Controller
 {
     public function store(Request $request)
     {
-        // Validasi Input
         $request->validate([
             'tanggal'      => 'required|date',
             'id_jadwal'    => 'required|exists:jadwal,id_jadwal',
             'data_absensi' => 'required|array', 
-            'data_nilai'   => 'nullable|array', // Validasi data nilai (opsional)
+            'data_nilai'   => 'nullable|array', 
         ]);
 
         $tanggal = $request->tanggal;
         $idJadwal = $request->id_jadwal;
         $dataAbsensi = $request->data_absensi;
-        $dataNilai = $request->data_nilai ?? []; // Default array kosong jika tidak ada
+        $dataNilai = $request->data_nilai ?? []; 
 
         DB::transaction(function () use ($tanggal, $idJadwal, $dataAbsensi, $dataNilai) {
             $jadwal = Jadwal::findOrFail($idJadwal);
 
+            // LOGIKA BARU: Cek berdasarkan Tanggal DAN Jam Mulai
+            // Ini akan memisahkan sesi pagi dan siang menjadi 2 kegiatan berbeda
             $kegiatan = Kegiatan::firstOrCreate(
                 [
-                    'id_eskul' => $jadwal->id_eskul,
-                    'tanggal'  => $tanggal,
+                    'id_eskul'  => $jadwal->id_eskul,
+                    'tanggal'   => $tanggal,
+                    'jam_mulai' => $jadwal->jam_mulai, // Pembeda sesi
                 ],
                 [
-                    'materi_kegiatan' => 'Latihan Rutin (Sesi ' . $jadwal->jam_mulai . ')',
+                    'jam_selesai'        => $jadwal->jam_selesai,
+                    'materi_kegiatan'    => 'Latihan Rutin (Sesi ' . $jadwal->jam_mulai . ')',
                     'catatan_pembimbing' => 'Absensi dibuat otomatis dari jadwal.',
                 ]
             );
@@ -55,7 +58,7 @@ class AbsensiController extends Controller
                     ]
                 );
 
-                // 2. Simpan Nilai Harian (Hanya jika status Hadir dan ada data nilai)
+                // 2. Simpan Nilai Harian (Hanya jika status Hadir)
                 if ($status === 'Hadir' && isset($dataNilai[$idPeserta])) {
                     $nilai = $dataNilai[$idPeserta];
                     
@@ -69,7 +72,6 @@ class AbsensiController extends Controller
                         ]
                     );
                 } else {
-                    // Jika tidak hadir, hapus nilai harian jika ada (agar tidak mengganggu rata-rata)
                     NilaiHarian::where('id_absensi', $absensi->id_absensi)->delete();
                 }
             }
@@ -77,7 +79,6 @@ class AbsensiController extends Controller
 
         return back()->with('success', 'Absensi dan Nilai Harian berhasil disimpan.');
     }
-
 
     /**
      * Menampilkan Halaman Cetak Log Absensi
@@ -91,10 +92,8 @@ class AbsensiController extends Controller
         $eskul = Eskul::find($request->id_eskul);
         $filters = $request->only(['search', 'status', 'start_date', 'end_date']);
         
-        // Nama file yang rapi
         $fileName = 'Laporan_Absensi_' . str_replace(' ', '_', $eskul->nama_eskul) . '_' . date('d-m-Y') . '.xlsx';
 
-        // Panggil class export dan download using fully qualified name to avoid namespace issues
         return \Maatwebsite\Excel\Facades\Excel::download(new AbsensiExport($request->id_eskul, $filters, $eskul->nama_eskul), $fileName);
     }
 }

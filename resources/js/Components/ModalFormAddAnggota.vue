@@ -1,6 +1,6 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3';
-import { watch,computed } from 'vue';
+import { watch, computed } from 'vue';
 
 const props = defineProps({
     show: Boolean,
@@ -52,6 +52,18 @@ const kelasOptions = computed(() => {
     }
     return options;
 });
+
+// Helper untuk format tanggal timestamp
+const formatTimestamp = (dateString) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+};
 
 watch(() => props.show, (isOpen) => {
     if (isOpen) {
@@ -172,6 +184,20 @@ const submit = () => {
                                     <option :value="true">Aktif</option>
                                     <option :value="false">Non-Aktif</option>
                                 </select>
+                            </div>
+                        </div>
+
+                        <!-- Info Created At / Updated At (Hanya muncul saat edit) -->
+                        <div v-if="anggotaData" class="mt-4 pt-3 border-t border-[#94B4C1]/30">
+                            <div class="grid grid-cols-2 gap-4 text-xs text-gray-500">
+                                <div>
+                                    <span class="block font-bold text-[#547792] mb-0.5">Dibuat pada:</span>
+                                    <span>{{ formatTimestamp(anggotaData.created_at) }}</span>
+                                </div>
+                                <div>
+                                    <span class="block font-bold text-[#547792] mb-0.5">Terakhir diupdate:</span>
+                                    <span>{{ formatTimestamp(anggotaData.updated_at) }}</span>
+                                </div>
                             </div>
                         </div>
                     </div>

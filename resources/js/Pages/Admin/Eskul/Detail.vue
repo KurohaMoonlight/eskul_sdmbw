@@ -1,11 +1,12 @@
 <script setup>
 import { ref } from 'vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import Navbar from '@/Components/Navbar.vue';
 import TabJadwal from '@/Components/TabJadwal.vue';
 import TabAnggota from '@/Components/TabAnggota.vue';
 import ModalFormEskul from '@/Components/ModalFormEskul.vue';
 import Footer from '../../../Components/Footer.vue';
+import Swal from 'sweetalert2';
 
 const props = defineProps({
     eskul: {
@@ -16,18 +17,34 @@ const props = defineProps({
         type: Array,
         default: () => []
     },
-    // Tangkap data peserta dari Controller
     allPeserta: {
         type: Array,
         default: () => []
     }
 });
 
-const activeTab = ref('anggota'); // Default tab (bisa diubah sesuai selera)
+const activeTab = ref('anggota');
 const showEditModal = ref(false);
 
 const openEditInfo = () => {
     showEditModal.value = true;
+};
+
+// Fungsi Hapus Eskul
+const deleteEskul = () => {
+    Swal.fire({
+        title: 'Hapus Eskul?',
+        text: "Data eskul ini akan dihapus permanen!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Ya, Hapus!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            router.delete(`/admin/eskul/${props.eskul.id_eskul}`);
+        }
+    });
 };
 </script>
 
@@ -57,11 +74,17 @@ const openEditInfo = () => {
                             <p class="mt-2 text-[#94B4C1] max-w-2xl">{{ props.eskul.deskripsi || 'Tidak ada deskripsi.' }}</p>
                             
                             <div class="mt-6 flex flex-wrap gap-4">
+                                <!-- PERBAIKAN TAMPILAN PEMBIMBING (ARRAY) -->
                                 <div class="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-1.5 backdrop-blur-md">
                                     <svg class="h-5 w-5 text-[#94B4C1]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                     </svg>
-                                    <span class="text-sm font-medium">{{ props.eskul.pembimbing?.nama_lengkap || 'Belum ada pembimbing' }}</span>
+                                    <span class="text-sm font-medium">
+                                        {{ props.eskul.pembimbings?.length > 0 
+                                            ? props.eskul.pembimbings.map(p => p.nama_lengkap).join(', ') 
+                                            : 'Belum ada pembimbing' 
+                                        }}
+                                    </span>
                                 </div>
                                 <div class="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-1.5 backdrop-blur-md">
                                     <svg class="h-5 w-5 text-[#94B4C1]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -72,15 +95,21 @@ const openEditInfo = () => {
                             </div>
                         </div>
                         
-                        <div class="relative z-20 shrink-0">
-                             <button type="button" @click="openEditInfo" class="cursor-pointer rounded-lg bg-[#EAE0CF]/20 px-4 py-2 text-sm font-bold transition hover:bg-[#EAE0CF] hover:text-[#213448] active:scale-95 shadow-sm">
+                        <div class="relative z-20 shrink-0 flex gap-3">
+                             <button type="button" @click="openEditInfo" class="cursor-pointer rounded-lg bg-[#EAE0CF]/20 px-4 py-2 text-sm font-bold transition hover:bg-[#EAE0CF] hover:text-[#213448] active:scale-95 shadow-sm border border-white/10">
                                 Edit Info
+                            </button>
+                            
+                            <button type="button" @click="deleteEskul" class="cursor-pointer rounded-lg bg-red-500/20 px-4 py-2 text-sm font-bold text-red-200 transition hover:bg-red-600 hover:text-white active:scale-95 shadow-sm border border-red-400/30 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Hapus
                             </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- TABS NAVIGATION -->
                 <div class="mb-6 border-b border-[#94B4C1]/50">
                     <nav class="-mb-px flex gap-6">
                         <button @click="activeTab = 'jadwal'" :class="activeTab === 'jadwal' ? 'border-[#213448] text-[#213448]' : 'border-transparent text-[#547792] hover:text-[#213448]'" class="border-b-4 px-1 py-4 text-sm font-bold transition-colors">
@@ -92,11 +121,9 @@ const openEditInfo = () => {
                     </nav>
                 </div>
 
-                <!-- TAB CONTENT -->
                 <div class="min-h-[400px]">
                     <TabJadwal v-if="activeTab === 'jadwal'" :jadwal="props.eskul.jadwal" :idEskul="props.eskul.id_eskul" :limitMin="props.eskul.jenjang_kelas_min" :limitMax="props.eskul.jenjang_kelas_max" />
                     
-                    <!-- PASSING PROPS allPeserta KE SINI -->
                     <TabAnggota 
                         v-if="activeTab === 'anggota'" 
                         :anggota="props.eskul.anggota_eskul" 

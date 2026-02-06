@@ -13,6 +13,7 @@ use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Concerns\WithCustomStartCell;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -20,7 +21,7 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use Carbon\Carbon;
 
-class NilaiExport implements FromCollection, WithHeadings, WithMapping, WithStyles, ShouldAutoSize, WithEvents
+class NilaiExport implements FromCollection, WithHeadings, WithMapping, WithStyles, ShouldAutoSize, WithEvents, WithCustomStartCell
 {
     protected $idEskul;
     protected $semester;
@@ -37,10 +38,19 @@ class NilaiExport implements FromCollection, WithHeadings, WithMapping, WithStyl
         $this->semester = $semester;
         $this->tahunAjaran = $tahunAjaran;
 
-        // Ambil Info Eskul & Pembimbing
-        $eskul = Eskul::with('pembimbing')->find($idEskul);
+        // PERBAIKAN: Gunakan relasi 'pembimbings' (plural) sesuai Model Eskul baru
+        // Menggunakan find() lalu load() atau with() langsung
+        $eskul = Eskul::with('pembimbings')->find($idEskul);
+        
         $this->namaEskul = $eskul ? $eskul->nama_eskul : '-';
-        $this->namaPembimbing = ($eskul && $eskul->pembimbing) ? $eskul->pembimbing->nama_lengkap : '-';
+        
+        // Logika Baru: Mengambil banyak nama pembimbing dan digabung dengan koma
+        // Pastikan cek relasi pembimbings ada dan tidak kosong
+        if ($eskul && $eskul->pembimbings && $eskul->pembimbings->count() > 0) {
+            $this->namaPembimbing = $eskul->pembimbings->pluck('nama_lengkap')->join(', ');
+        } else {
+            $this->namaPembimbing = '-';
+        }
 
         // Pre-fetch ID Kegiatan dalam semester ini untuk efisiensi query kehadiran
         $dateRange = $this->getSemesterDateRange($semester, $tahunAjaran);
@@ -49,9 +59,11 @@ class NilaiExport implements FromCollection, WithHeadings, WithMapping, WithStyl
             ->pluck('id_kegiatan');
     }
 
-    /**
-     * Helper Date Range (Sama seperti di Controller)
-     */
+    public function startCell(): string
+    {
+        return 'A2'; // Margin atas
+    }
+
     private function getSemesterDateRange($semester, $tahunAjaran)
     {
         $years = explode('/', $tahunAjaran);
@@ -143,9 +155,11 @@ class NilaiExport implements FromCollection, WithHeadings, WithMapping, WithStyl
     {
         return [
             ['REKAPITULASI NILAI EKSTRAKURIKULER'],
-            ['Eskul: ' . $this->namaEskul],
-            ['Pembimbing: ' . $this->namaPembimbing],
-            ['Periode: Semester ' . $this->semester . ' ' . $this->tahunAjaran],
+            [''],
+            ['Nama Ekstrakurikuler', ': ' . $this->namaEskul],
+            ['Nama Pembimbing', ': ' . $this->namaPembimbing],
+            ['Periode Semester', ': ' . $this->semester . ' ' . $this->tahunAjaran],
+            ['Tanggal Cetak', ': ' . Carbon::now()->translatedFormat('d F Y')],
             [''], // Spasi
             [     // Header Tabel Data
                 'NAMA SISWA',
@@ -173,8 +187,8 @@ class NilaiExport implements FromCollection, WithHeadings, WithMapping, WithStyl
             3 => ['font' => ['bold' => true, 'size' => 12]],
             4 => ['font' => ['bold' => true, 'size' => 12, 'color' => ['rgb' => '547792']]], // Warna biru muda
             
-            // Header Tabel (Baris 6)
-            6 => [
+            // Header Tabel (Baris 9)
+            9 => [
                 'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
                 'fill' => [
                     'fillType' => Fill::FILL_SOLID,
@@ -197,12 +211,10 @@ class NilaiExport implements FromCollection, WithHeadings, WithMapping, WithStyl
             AfterSheet::class => function(AfterSheet $event) {
                 $sheet = $event->sheet;
                 $highestRow = $sheet->getHighestRow();
+                $highestCol = 'J';
 
                 // Merge Titles
-                $sheet->mergeCells('A1:J1');
-                $sheet->mergeCells('A2:J2');
-                $sheet->mergeCells('A3:J3');
-                $sheet->mergeCells('A4:J4');
+                $sheet->mergeCells("A2:{$highestCol}2");
 
                 // Border Seluruh Tabel
                 $styleBorder = [
@@ -213,17 +225,17 @@ class NilaiExport implements FromCollection, WithHeadings, WithMapping, WithStyl
                         ],
                     ],
                 ];
-                $sheet->getStyle('A6:J' . $highestRow)->applyFromArray($styleBorder);
+                $sheet->getStyle('A9:J' . $highestRow)->applyFromArray($styleBorder);
 
                 // Alignment Center untuk Kolom Angka & Status
                 // B: Kelas, C: LP, D: Hadir, E-I: Nilai
-                $sheet->getStyle('B7:I' . $highestRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle('B10:I' . $highestRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
                 
                 // Wrap Text untuk Catatan (Kolom J)
-                $sheet->getStyle('J7:J' . $highestRow)->getAlignment()->setWrapText(true);
+                $sheet->getStyle('J10:J' . $highestRow)->getAlignment()->setWrapText(true);
 
                 // Zebra Striping
-                for ($row = 7; $row <= $highestRow; $row++) {
+                for ($row = 10; $row <= $highestRow; $row++) {
                     if ($row % 2 == 0) {
                         $sheet->getStyle('A' . $row . ':J' . $row)->getFill()
                             ->setFillType(Fill::FILL_SOLID)

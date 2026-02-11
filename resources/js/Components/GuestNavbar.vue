@@ -39,9 +39,7 @@ onUnmounted(() => window.removeEventListener('scroll', handleScroll));
                 <!-- Desktop Menu -->
                 <div class="hidden md:flex items-center gap-8">
                     <a href="#beranda" class="text-sm font-medium text-[#EAE0CF] hover:text-white transition">Beranda</a>
-                    <a href="#tentang" class="text-sm font-medium text-[#94B4C1] hover:text-[#EAE0CF] transition">Tentang</a>
                     <a href="#prestasi" class="text-sm font-medium text-[#94B4C1] hover:text-[#EAE0CF] transition">Prestasi</a>
-                    <a href="#kontak" class="text-sm font-medium text-[#94B4C1] hover:text-[#EAE0CF] transition">Kontak</a>
                 </div>
 
                 <!-- Login Button -->

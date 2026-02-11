@@ -49,6 +49,8 @@ const formatDate = (dateString) => {
         day: 'numeric', month: 'long', year: 'numeric'
     });
 };
+
+console.log(props.prestasiList);
 </script>
 
 <template>
@@ -165,14 +167,14 @@ const formatDate = (dateString) => {
                     >
                         <!-- Image / Placeholder -->
                         <div class="h-48 bg-gray-200 relative overflow-hidden">
-                            <div v-if="!item.foto" class="absolute inset-0 flex items-center justify-center bg-[#213448]/5 text-[#94B4C1]">
+                            <div v-if="!item.foto_prestasi" class="absolute inset-0 flex items-center justify-center bg-[#213448]/5 text-[#94B4C1]">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                 </svg>
                             </div>
                             <img 
                                 v-else 
-                                :src="item.foto" 
+                                :src="`/storage/${item.foto_prestasi}`" 
                                 class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
                                 alt="Foto Prestasi"
                             >

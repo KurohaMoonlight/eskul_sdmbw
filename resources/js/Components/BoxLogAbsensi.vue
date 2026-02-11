@@ -87,6 +87,8 @@ const getStatusBadge = (status) => {
         default: return 'bg-gray-100 text-gray-700';
     }
 };
+
+console.log(props.logs);
 </script>
 
 <template>
